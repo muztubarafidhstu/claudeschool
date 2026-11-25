@@ -1,10 +1,14 @@
 import { createContext, useContext, useState } from 'react';
-import { Save, Undo2, Lock, ShieldCheck, Plus, Trash2, Download, Upload, Sparkles, ArrowUpCircle, KeyRound, School } from 'lucide-react';
+import { Save, Undo2, Lock, ShieldCheck, FolderOpen, Images, Plus, Trash2, Download, Upload, Sparkles, ArrowUpCircle, KeyRound, School } from 'lucide-react';
 import { useApp } from '../components/AppContext';
 import { Card, Field, Modal, Switch, Tabs, Empty } from '../components/ui';
-import { CLASSES, SECTION_LETTERS, money } from '../lib/util';
-import { SUBJECT_GROUPS, applyImportedConfig, exportableConfig, saveSettings, type AppSettings, type Modules } from '../lib/config';
+import { SECTION_LETTERS, money } from '../lib/util';
+import { groupLabel, groups, isCoaching, terms } from '../lib/groups';
+import { DEFAULT_RESULT_SMS, SUBJECT_GROUPS, applyImportedConfig, exportableConfig, saveSettings, type AppSettings, type Batch, type Modules } from '../lib/config';
 import { PREVIEW_BUILD } from './LicenseGate';
+import { fillTemplate, sendSms, smsConfigured, smsParts } from '../lib/sms';
+import { exportAllPhotos } from '../lib/photos';
+import { pickFolder } from '../lib/autobackup';
 import { LICENSE_API, switchLicenseKey } from '../lib/license';
 import { changePin } from '../lib/pin';
 import { importDemoData } from '../lib/demo';
@@ -13,7 +17,7 @@ import { pickTextFile, saveTextFile } from '../lib/platform';
 import { loadLicense, syncOnline } from '../lib/license';
 import { useEffect } from 'react';
 
-type Tab = 'modules' | 'classes' | 'subjects' | 'school' | 'security' | 'data';
+type Tab = 'modules' | 'classes' | 'subjects' | 'school' | 'sms' | 'security' | 'data';
 
 /** Settings tabs edit a draft; nothing is stored until "Save changes" is pressed. */
 const DraftCtx = createContext<{ d: AppSettings; set: (patch: Partial<AppSettings>) => void }>(null as never);
@@ -34,6 +38,7 @@ function SaveBar({ dirty, onSave, onDiscard }: { dirty: boolean; onSave: () => v
 export default function Settings() {
   const { settings, replaceSettings, toast, settingsUnlocked, setSettingsUnlocked, requirePin } = useApp();
   const [tab, setTab] = useState<Tab>('modules');
+  const coaching = isCoaching(settings);
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [base, setBase] = useState<AppSettings>(settings);
   if (settings !== base) { setBase(settings); setDraft(settings); } // settings replaced elsewhere (import/restore)
@@ -62,15 +67,17 @@ export default function Settings() {
         <button className="btn-danger" onClick={lock}><Lock size={16} /> Lock Settings</button>
       </div>
       <Tabs value={tab} onChange={setTab} items={[
-        { value: 'modules', label: 'Modules' }, { value: 'classes', label: 'Classes & Sections' }, { value: 'subjects', label: 'Subjects & Marks' },
-        { value: 'school', label: 'School & Fees' }, { value: 'security', label: 'PINs & License' }, { value: 'data', label: 'Data, Config & Promotion' },
+        { value: 'modules', label: 'Modules' }, { value: 'classes', label: coaching ? 'Batches' : 'Classes & Sections' },
+        ...(coaching ? [] : [{ value: 'subjects' as Tab, label: 'Subjects & Marks' }]),
+        { value: 'school', label: coaching ? 'Centre & Fees' : 'School & Fees' }, { value: 'sms', label: 'SMS' }, { value: 'security', label: 'PINs & License' }, { value: 'data', label: 'Data, Config & Promotion' },
       ]} />
       <DraftCtx.Provider value={{ d: draft, set: (patch) => setDraft((p) => ({ ...p, ...patch })) }}>
         {tab === 'modules' && <ModulesTab />}
         {tab === 'classes' && <ClassesTab />}
         {tab === 'subjects' && <SubjectsTab />}
         {tab === 'school' && <SchoolTab />}
-        {['modules', 'classes', 'subjects', 'school'].includes(tab) && <SaveBar dirty={dirty} onSave={save} onDiscard={() => setDraft(settings)} />}
+        {tab === 'sms' && <SmsTab />}
+        {['modules', 'classes', 'subjects', 'school', 'sms'].includes(tab) && <SaveBar dirty={dirty} onSave={save} onDiscard={() => setDraft(settings)} />}
       </DraftCtx.Provider>
       {tab === 'security' && <SecurityTab />}
       {tab === 'data' && <DataTab dirty={dirty} />}
@@ -109,13 +116,14 @@ function ModulesTab() {
 
 function ClassesTab() {
   const { settings, update } = useDraft();
+  if (isCoaching(settings)) return <BatchesTab />;
   return (
     <Card title="Independent section count per class">
       {!settings.modules.sections ? <Empty>Turn ON “Class Sections Division” in Modules to configure sections.</Empty> : (
         <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-          {CLASSES.map((c) => (
+          {groups(settings).map(({ no: c, label }) => (
             <div key={c} className="rounded-lg border border-line p-3">
-              <div className="mb-2 text-sm font-semibold">Class {c}</div>
+              <div className="mb-2 text-sm font-semibold">{label}</div>
               <select className="input" value={settings.sectionsPerClass[c] ?? 1} onChange={(e) => update({ sectionsPerClass: { ...settings.sectionsPerClass, [c]: Number(e.target.value) } })}>
                 {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} section{n > 1 ? 's' : ''} ({SECTION_LETTERS.slice(0, n).join(', ')})</option>)}
               </select>
@@ -123,6 +131,47 @@ function ClassesTab() {
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+/** Coaching: the owner's own batch list. Batches are hidden (not deleted) so old records keep their batch name. */
+function BatchesTab() {
+  const { settings, update } = useDraft();
+  const [name, setName] = useState('');
+  const list = settings.batches;
+  const setB = (no: number, patch: Partial<Batch>) => update({ batches: list.map((b) => (b.no === no ? { ...b, ...patch } : b)) });
+  const add = () => {
+    const n = name.trim();
+    if (!n) return;
+    const no = Math.max(0, ...list.map((b) => b.no)) + 1;
+    if (no > 99) return;
+    update({ batches: [...list, { no, name: n, active: true }] });
+    setName('');
+  };
+  return (
+    <Card title="Batches" actions={<span className="text-xs text-slate-500">Students, attendance, fees and exams are organised by batch. Roll numbers are per batch.</span>}>
+      <div className="space-y-3 p-4">
+        <table className="table">
+          <thead><tr><th className="w-12">#</th><th>Batch name</th><th>বাংলা</th><th>Schedule (optional)</th>{settings.modules.sections && <th>Sections</th>}<th>Monthly fee</th><th>Shown</th></tr></thead>
+          <tbody>{list.map((b) => (
+            <tr key={b.no} className={b.active ? '' : 'opacity-50'}>
+              <td className="font-mono text-xs">{String(b.no).padStart(2, '0')}</td>
+              <td><input className="input py-1" value={b.name} onChange={(e) => setB(b.no, { name: e.target.value })} /></td>
+              <td><input className="input bn py-1" value={b.name_bn ?? ''} onChange={(e) => setB(b.no, { name_bn: e.target.value })} /></td>
+              <td><input className="input py-1" placeholder="Sat/Mon/Wed 4 PM" value={b.schedule ?? ''} onChange={(e) => setB(b.no, { schedule: e.target.value })} /></td>
+              {settings.modules.sections && <td><select className="input py-1" value={settings.sectionsPerClass[b.no] ?? 1} onChange={(e) => update({ sectionsPerClass: { ...settings.sectionsPerClass, [b.no]: Number(e.target.value) } })}>{[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>}
+              <td><input type="number" className="input w-28 py-1" value={settings.defaultFees[b.no]?.monthly ?? 0} onChange={(e) => update({ defaultFees: { ...settings.defaultFees, [b.no]: { admission: settings.defaultFees[b.no]?.admission ?? 0, monthly: Number(e.target.value) } } })} /></td>
+              <td><input type="checkbox" className="h-5 w-5 accent-[#0D9488]" checked={b.active} onChange={(e) => setB(b.no, { active: e.target.checked })} /></td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <div className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3">
+          <Field label="New batch name"><input className="input" placeholder="e.g. HSC Physics Morning" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} /></Field>
+          <button className="btn-primary" onClick={add} disabled={!name.trim()}><Plus size={16} /> Add batch</button>
+          <span className="text-xs text-slate-500">Untick “Shown” to hide a batch you no longer use (its old records stay).</span>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -177,20 +226,31 @@ function SchoolTab() {
           </Field>
         </div>
       </Card>
-      <Card title="Default fees per class (pre-filled on admission)">
+      <Card title="Photo folder">
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-slate-600">Choose a folder and every student and staff photo is also saved there as a picture file (for example <code>260512_Sadia_Rahman.jpg</code>) — handy for ID cards, printing or your own records.</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Folder" className="min-w-[260px] flex-1"><div className="input truncate bg-slate-50 font-mono text-xs">{settings.photoFolder ?? 'Not chosen (photos are kept only inside the app)'}</div></Field>
+            <button className="btn-ghost" onClick={async () => { const f = await pickFolder(); if (f) update({ photoFolder: f }); }}><FolderOpen size={16} /> Choose folder</button>
+            {settings.photoFolder && <button className="btn-ghost" onClick={() => update({ photoFolder: null })}>Stop saving</button>}
+          </div>
+          <PhotoExport />
+        </div>
+      </Card>
+      <Card title={`Default fees per ${terms(settings).group.toLowerCase()} (pre-filled on admission)`}>
         <div className="overflow-x-auto p-4">
           <table className="table">
-            <thead><tr><th>Class</th><th>Monthly tuition</th><th>Admission fee</th></tr></thead>
-            <tbody>{CLASSES.map((c) => (
-              <tr key={c}><td>Class {c}</td>
+            <thead><tr><th>{terms(settings).group}</th><th>Monthly tuition</th><th>Admission fee</th></tr></thead>
+            <tbody>{groups(settings).map(({ no: c, label }) => (
+              <tr key={c}><td>{label}</td>
                 <td><input type="number" className="input py-1" value={settings.defaultFees[c]?.monthly ?? 0} onChange={(e) => update({ defaultFees: { ...settings.defaultFees, [c]: { ...settings.defaultFees[c], monthly: Number(e.target.value) } } })} /></td>
                 <td><input type="number" className="input py-1" value={settings.defaultFees[c]?.admission ?? 0} onChange={(e) => update({ defaultFees: { ...settings.defaultFees, [c]: { ...settings.defaultFees[c], admission: Number(e.target.value) } } })} /></td></tr>
             ))}</tbody>
           </table>
-          <div className="mt-4 grid max-w-md grid-cols-2 gap-3">
+          {!isCoaching(settings) && <div className="mt-4 grid max-w-md grid-cols-2 gap-3">
             <Field label="Half Yearly exam fee"><input type="number" className="input" value={settings.examFees.HALF_YEARLY} onChange={(e) => update({ examFees: { ...settings.examFees, HALF_YEARLY: Number(e.target.value) } })} /></Field>
             <Field label="Final exam fee"><input type="number" className="input" value={settings.examFees.FINAL} onChange={(e) => update({ examFees: { ...settings.examFees, FINAL: Number(e.target.value) } })} /></Field>
-          </div>
+          </div>}
         </div>
       </Card>
     </div>
@@ -267,16 +327,16 @@ function DataTab({ dirty }: { dirty: boolean }) {
       </Card>
       <Card title="Demo data (sales demonstrations)">
         <div className="space-y-3 p-4">
-          <p className="text-sm text-slate-600">Populates ~250 realistic students across Class 1–10 with attendance, fee receipts, half-yearly results and 12 staff with payroll. Only works on an empty database.</p>
+          <p className="text-sm text-slate-600">{isCoaching(settings) ? 'Populates realistic coaching data: students in every batch, attendance, fee receipts, weekly/model test results and teachers paid monthly, daily and per class.' : 'Populates ~250 realistic students across Class 1–10 with attendance, fee receipts, half-yearly results and 12 staff with payroll.'} Only works on an empty database.</p>
           <button className="btn-primary" disabled={busy} onClick={async () => { setBusy(true); try { const r = await importDemoData(settings); toast(`Demo data imported: ${r.students} students, ${r.staff} staff`); bump(); } catch (e: any) { toast(e.message, 'err'); } setBusy(false); }}><Sparkles size={16} /> Import demo data</button>
         </div>
       </Card>
-      <Card title={`Academic year promotion (${settings.academicYear} → ${settings.academicYear + 1})`} className="lg:col-span-2">
+      {terms(settings).promotion && <Card title={`Academic year promotion (${settings.academicYear} → ${settings.academicYear + 1})`} className="lg:col-span-2">
         <div className="space-y-3 p-4">
           <p className="text-sm text-slate-600">Promotes students who PASSED the {settings.academicYear} Final Exam to the next class (Class 10 → graduated). Students who failed or have no final result stay in their class. Rolls in every class are re-assigned by merit: highest total = Roll 01.</p>
           <button className="btn-ghost" onClick={async () => setPreview(await previewPromotion(settings))}><ArrowUpCircle size={16} /> Preview promotion</button>
         </div>
-      </Card>
+      </Card>}
       <Modal open={!!preview} onClose={() => setPreview(null)} title="Promotion preview" width="max-w-2xl"
         footer={<><button className="btn-ghost" onClick={() => setPreview(null)}>Cancel</button>
           <button className="btn-primary" disabled={busy} onClick={async () => {
@@ -287,7 +347,7 @@ function DataTab({ dirty }: { dirty: boolean }) {
             setBusy(false);
           }}>Run promotion</button></>}>
         <table className="table"><thead><tr><th>Class</th><th>Students</th><th>Passed (promote)</th><th>Failed (repeat)</th><th>No final result (repeat)</th></tr></thead>
-          <tbody>{preview?.map((p) => <tr key={p.classNo}><td>Class {p.classNo}</td><td>{p.total}</td><td className="text-ok">{p.passed}{p.classNo === 10 ? ' (graduate)' : ''}</td><td className="text-bad">{p.failed}</td><td className="text-due">{p.noResult}</td></tr>)}</tbody></table>
+          <tbody>{preview?.map((p) => <tr key={p.classNo}><td>{groupLabel(settings, p.classNo)}</td><td>{p.total}</td><td className="text-ok">{p.passed}{p.classNo === 10 ? ' (graduate)' : ''}</td><td className="text-bad">{p.failed}</td><td className="text-due">{p.noResult}</td></tr>)}</tbody></table>
         <p className="mt-3 text-xs text-slate-500">Take a backup first. Fee defaults: {money(settings.defaultFees[1]?.monthly)}… are not changed automatically.</p>
       </Modal>
     </div>
@@ -318,5 +378,86 @@ function ChangeKey() {
         }}>{busy ? 'Checking…' : 'Use this key'}</button>
       </div>
     </div>
+  );
+}
+
+function SmsTab() {
+  const { settings, update } = useDraft();
+  const { toast } = useApp();
+  const sms = settings.sms;
+  const set = (patch: Partial<typeof sms>) => update({ sms: { ...sms, ...patch } });
+  const [testTo, setTestTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const sample = fillTemplate(sms.resultTemplate, { name: 'Sadia Rahman', roll: 12, group: groups(settings)[0]?.label ?? 'Class 5', marks: 42, full: 50, percent: 84, exam: 'Weekly Test 3', date: '25 Nov', position: 2, total: 28, remark: 'Excellent!', school: settings.school.name || 'Your School' });
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <Card title="SMS gateway">
+        <div className="space-y-4 p-4">
+          <div className="grid grid-cols-3 gap-2">
+            {([['NONE', 'Off'], ['HTTP', 'SMS company (API)'], ['ESP32', 'My ESP32 + GSM']] as const).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => set({ provider: v })} className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${sms.provider === v ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-slate-600 hover:bg-slate-50'}`}>{l}</button>
+            ))}
+          </div>
+          {sms.provider === 'HTTP' && (
+            <>
+              <p className="text-xs text-slate-500">Paste the “send SMS” link from your SMS company (BulkSMSBD, SSL Wireless, Alpha SMS, MiM SMS…). Put <code>{'{to}'}</code> where the number goes (01XXXXXXXXX, or <code>{'{to88}'}</code> for 8801…) and <code>{'{msg}'}</code> where the message goes.</p>
+              <Field label="Method"><select className="input" value={sms.method} onChange={(e) => set({ method: e.target.value as 'GET' | 'POST' })}><option value="GET">GET (link)</option><option value="POST">POST (form/JSON body)</option></select></Field>
+              <Field label="URL"><textarea className="input font-mono text-xs" rows={3} placeholder="https://bulksmsbd.net/api/smsapi?api_key=YOUR_KEY&type=text&number={to88}&senderid=YOUR_ID&message={msg}" value={sms.url} onChange={(e) => set({ url: e.target.value.trim() })} /></Field>
+              {sms.method === 'POST' && (
+                <>
+                  <Field label="Content type"><input className="input font-mono text-xs" value={sms.contentType} onChange={(e) => set({ contentType: e.target.value })} /></Field>
+                  <Field label="Body template"><textarea className="input font-mono text-xs" rows={3} placeholder='{"number":"{to88}","message":"{msg}"}' value={sms.body} onChange={(e) => set({ body: e.target.value })} /></Field>
+                </>
+              )}
+              <Field label="Success text in the reply (optional)" hint="e.g. 202 or success — leave empty to accept any HTTP 200 reply"><input className="input" value={sms.successText} onChange={(e) => set({ successText: e.target.value })} /></Field>
+            </>
+          )}
+          {sms.provider === 'ESP32' && (
+            <>
+              <p className="text-xs text-slate-500">Your ESP32 with a SIM800/SIM7600 module on the same Wi-Fi. The app calls <code>http://IP/send?to=01…&amp;msg=…&amp;key=…</code> and expects a reply containing <b>OK</b>. The user guide includes the ESP32 code.</p>
+              <Field label="ESP32 address"><input className="input font-mono" placeholder="http://192.168.1.50" value={sms.espUrl} onChange={(e) => set({ espUrl: e.target.value.trim() })} /></Field>
+              <Field label="Gateway key"><input className="input font-mono" value={sms.espKey} onChange={(e) => set({ espKey: e.target.value.trim() })} /></Field>
+            </>
+          )}
+          <Switch checked={false} onChange={() => toast('OTP login will come in a later update.')} label="OTP verification (coming later)" desc="Reserved for the OTP feature you plan to add. It does nothing yet." />
+        </div>
+      </Card>
+      <div className="space-y-5">
+        <Card title="Result SMS message">
+          <div className="space-y-3 p-4">
+            <textarea className="input text-sm" rows={4} value={sms.resultTemplate} onChange={(e) => set({ resultTemplate: e.target.value })} />
+            <p className="text-xs text-slate-500">Placeholders: {'{name} {roll} {group} {marks} {full} {percent} {exam} {date} {position} {total} {remark} {school}'}</p>
+            <div className="rounded-lg bg-slate-50 p-3 text-sm"><div className="label">Preview ({smsParts(sample)} SMS part{smsParts(sample) > 1 ? 's' : ''}, {sample.length} characters)</div>{sample}</div>
+            <button className="btn-ghost btn-sm" onClick={() => set({ resultTemplate: DEFAULT_RESULT_SMS })}>Reset to default</button>
+          </div>
+        </Card>
+        <Card title="Send a test SMS">
+          <div className="flex flex-wrap items-end gap-2 p-4">
+            <Field label="Mobile number"><input className="input" placeholder="01XXXXXXXXX" value={testTo} onChange={(e) => setTestTo(e.target.value.replace(/\D/g, '').slice(0, 13))} /></Field>
+            <button className="btn-primary" disabled={busy || !smsConfigured(sms)} onClick={async () => {
+              setBusy(true);
+              const r = await sendSms(sms, testTo, `Test SMS from ${settings.school.name || 'ScholarDesk Pro'}. SMS is working.`, 'TEST');
+              setBusy(false); toast(r.ok ? 'Test SMS sent' : r.detail, r.ok ? 'ok' : 'err');
+            }}>{busy ? 'Sending…' : 'Send test'}</button>
+            <span className="text-xs text-slate-500">Save changes first if you just edited the gateway.</span>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/** Uses the SAVED settings (the folder must be saved before exporting). */
+function PhotoExport() {
+  const { settings, toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  if (!settings.photoFolder) return null;
+  return (
+    <button className="btn-primary" disabled={busy} onClick={async () => {
+      setBusy(true);
+      try { const r = await exportAllPhotos(settings); toast(`${r.saved} photos saved to the folder${r.failed ? `, ${r.failed} failed` : ''}`, r.failed ? 'err' : 'ok'); }
+      catch (e: any) { toast(e.message ?? String(e), 'err'); }
+      setBusy(false);
+    }}><Images size={16} /> {busy ? 'Saving photos…' : 'Save all existing photos to the folder now'}</button>
   );
 }

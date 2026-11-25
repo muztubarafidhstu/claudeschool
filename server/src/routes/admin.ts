@@ -260,7 +260,7 @@ adminRouter.get('/settings', asyncH(async (_req, res) => {
 }));
 
 adminRouter.put('/settings', asyncH(async (req, res) => {
-  const b = z.record(z.string()).parse(req.body);
+  const b = z.record(z.string(), z.string()).parse(req.body);
   for (const [k, v] of Object.entries(b)) {
     await q(`INSERT INTO owner_settings(key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, [k, v]);
   }

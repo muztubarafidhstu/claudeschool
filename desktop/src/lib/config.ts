@@ -19,7 +19,36 @@ export interface AppSettings {
   onboarded: boolean;
   /** Lock the screen after this many idle minutes (needs the Screen lock PIN). */
   screenLock: { enabled: boolean; minutes: number };
+  /** SCHOOL or COACHING — taken from the license on every online check. */
+  product: 'SCHOOL' | 'COACHING';
+  /** Coaching batches (stored in students.class_no as the batch number). */
+  batches: Batch[];
+  /** Also save every student/staff photo as a JPEG file in this folder. */
+  photoFolder: string | null;
+  sms: SmsSettings;
 }
+
+export interface Batch { no: number; name: string; name_bn?: string; schedule?: string; active: boolean }
+export interface SmsSettings {
+  provider: 'NONE' | 'HTTP' | 'ESP32';
+  /** HTTP API: URL template, e.g. https://bulksmsbd.net/api/smsapi?api_key=KEY&type=text&number={to}&senderid=XXXX&message={msg} */
+  url: string;
+  method: 'GET' | 'POST';
+  /** POST body template (JSON or form text) with {to} and {msg} */
+  body: string;
+  contentType: string;
+  /** Text in the response that means success, e.g. "202" or "success" (empty = HTTP 2xx is enough) */
+  successText: string;
+  /** ESP32 GSM gateway on the local network, e.g. http://192.168.1.50 */
+  espUrl: string;
+  espKey: string;
+  resultTemplate: string;
+  /** Reserved for the owner's later OTP feature. */
+  otpEnabled: boolean;
+}
+
+export const DEFAULT_ABSENT_SMS = 'Dear Guardian, {name} (Roll {roll}, {group}) was ABSENT in {exam} on {date}. Please contact us. -{school}';
+export const DEFAULT_RESULT_SMS = 'Dear Guardian, {name} (Roll {roll}, {group}) got {marks}/{full} ({percent}%) in {exam} on {date}. Position {position}/{total}. {remark}-{school}';
 
 export const subjectGroup = (classNo: number, stream?: string | null): SubjectGroup =>
   classNo >= 9 ? `C9-10-${(stream as Stream) ?? 'Science'}` : `C${classNo}`;
@@ -35,6 +64,8 @@ const s = (name: string, name_bn: string, full = 100): Subject => ({ name, name_
 const primary = [s('Bangla', 'বাংলা'), s('English', 'ইংরেজি'), s('Mathematics', 'গণিত'), s('Science', 'বিজ্ঞান'), s('Bangladesh & Global Studies', 'বাংলাদেশ ও বিশ্বপরিচয়'), s('Religion', 'ধর্ম')];
 const junior = [...primary, s('ICT', 'তথ্য ও যোগাযোগ প্রযুক্তি', 50), s('Agriculture', 'কৃষিশিক্ষা', 50)];
 const common = [s('Bangla', 'বাংলা'), s('English', 'ইংরেজি'), s('Mathematics', 'গণিত'), s('Religion', 'ধর্ম'), s('ICT', 'তথ্য ও যোগাযোগ প্রযুক্তি', 50)];
+
+export const DEFAULT_BATCHES = ['ICT', 'Physics', 'Science', 'Arts', 'HSC 1st Year', 'HSC 2nd Year', 'Class 5', 'Class 8', 'Class 9', 'Class 10', 'SSC'];
 
 export function defaultSettings(): AppSettings {
   const year = new Date().getFullYear();
@@ -56,6 +87,10 @@ export function defaultSettings(): AppSettings {
     lang: 'en',
     onboarded: false,
     screenLock: { enabled: true, minutes: 2 },
+    product: 'SCHOOL',
+    batches: DEFAULT_BATCHES.map((name, i) => ({ no: i + 1, name, active: true })),
+    photoFolder: null,
+    sms: { provider: 'NONE', url: '', method: 'GET', body: '', contentType: 'application/json', successText: '', espUrl: '', espKey: '', resultTemplate: DEFAULT_RESULT_SMS, otpEnabled: false },
   };
 }
 
@@ -75,7 +110,7 @@ export async function setConfig(key: string, value: unknown) {
 export async function loadSettings(): Promise<AppSettings> {
   const d = defaultSettings();
   const saved = await getConfig<Partial<AppSettings>>('settings', {});
-  return { ...d, ...saved, school: { ...d.school, ...saved.school }, modules: { ...d.modules, ...saved.modules }, screenLock: { ...d.screenLock, ...saved.screenLock } };
+  return { ...d, ...saved, school: { ...d.school, ...saved.school }, modules: { ...d.modules, ...saved.modules }, screenLock: { ...d.screenLock, ...saved.screenLock }, sms: { ...d.sms, ...saved.sms } };
 }
 export const saveSettings = (s: AppSettings) => setConfig('settings', s);
 
@@ -85,6 +120,7 @@ export function exportableConfig(s: AppSettings) {
     type: 'scholardesk-config', version: 1, exported_at: new Date().toISOString(),
     school: { ...s.school }, modules: s.modules, sectionsPerClass: s.sectionsPerClass, subjects: s.subjects,
     examFees: s.examFees, defaultFees: s.defaultFees, academicYear: s.academicYear, lang: s.lang,
+    batches: s.batches, screenLock: s.screenLock,
   };
 }
 
@@ -101,6 +137,8 @@ export function applyImportedConfig(current: AppSettings, raw: any): AppSettings
     defaultFees: c.defaultFees ?? current.defaultFees,
     academicYear: c.academicYear ?? current.academicYear,
     lang: c.lang ?? current.lang,
+    batches: c.batches ?? current.batches,
+    screenLock: c.screenLock ?? current.screenLock,
     onboarded: true,
   };
 }

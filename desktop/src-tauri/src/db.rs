@@ -11,7 +11,10 @@ use std::sync::Mutex;
 
 pub struct Db(pub Mutex<Connection>);
 
-const MIGRATIONS: &[(i64, &str)] = &[(1, include_str!("../migrations/001_init.sql"))];
+const MIGRATIONS: &[(i64, &str)] = &[
+    (1, include_str!("../migrations/001_init.sql")),
+    (2, include_str!("../migrations/002_coaching.sql")),
+];
 
 pub fn open(path: &std::path::Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -24,12 +27,29 @@ pub fn open(path: &std::path::Path) -> rusqlite::Result<Connection> {
 
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    for (version, sql) in MIGRATIONS {
-        if *version > current {
-            conn.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {version}; COMMIT;"))?;
-        }
+    if MIGRATIONS.iter().all(|(v, _)| *v <= current) {
+        return Ok(());
     }
-    Ok(())
+    // Table rebuilds must not cascade-delete related rows: switch FK enforcement off (only possible
+    // outside a transaction), migrate, verify integrity, switch it back on.
+    conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+    let result = (|| {
+        for (version, sql) in MIGRATIONS {
+            if *version > current {
+                if let Err(e) = conn.execute_batch(&format!("BEGIN; {sql}; PRAGMA user_version = {version}; COMMIT;")) {
+                    let _ = conn.execute_batch("ROLLBACK;");
+                    return Err(e);
+                }
+            }
+        }
+        let broken: i64 = conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))?;
+        if broken > 0 {
+            eprintln!("warning: {broken} foreign key problems after migration");
+        }
+        Ok(())
+    })();
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    result
 }
 
 fn to_sql(v: &Value) -> SqlValue {
@@ -94,4 +114,42 @@ pub fn batch(conn: &mut Connection, stmts: &[Stmt]) -> rusqlite::Result<usize> {
     }
     tx.commit()?;
     Ok(total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn v1_data_survives_v2_migration() {
+        let dir = std::env::temp_dir().join(format!("sdmig-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("t.db");
+        {
+            // build a v1 database with related rows
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+            c.execute_batch(&format!("BEGIN; {}; PRAGMA user_version = 1; COMMIT;", MIGRATIONS[0].1)).unwrap();
+            c.execute_batch("INSERT INTO students(id, student_id, admission_year, admission_date, class_no, roll, name_en) VALUES (1,'260501',2026,'2026-01-05',5,1,'Ayesha');
+                INSERT INTO fee_ledger(student_id, receipt_no, fee_type, period, regular_amount, paid_amount, paid_on) VALUES (1,'R1','MONTHLY','2026-01',800,800,'2026-01-10');
+                INSERT INTO attendance_logs(student_id, date, class_no, section, status) VALUES (1,'2026-01-11',5,'A','P');
+                INSERT INTO staff(staff_code, name_en, designation, mobile, monthly_salary) VALUES ('ST-001','T','Teacher','01700000000',15000);").unwrap();
+        }
+        let c = open(&path).unwrap();
+        let v: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, 2);
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM fee_ledger", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "fee rows must survive the students rebuild");
+        let a: i64 = c.query_row("SELECT COUNT(*) FROM attendance_logs", [], |r| r.get(0)).unwrap();
+        assert_eq!(a, 1);
+        c.execute_batch("INSERT INTO students(student_id, admission_year, admission_date, class_no, roll, name_en) VALUES ('261101',2026,'2026-01-05',11,1,'Batch eleven')").unwrap();
+        let pt: String = c.query_row("SELECT pay_type FROM staff", [], |r| r.get(0)).unwrap();
+        assert_eq!(pt, "MONTHLY");
+        let fk: i64 = c.query_row("PRAGMA foreign_keys", [], |r| r.get(0)).unwrap();
+        assert_eq!(fk, 1);
+        // cascade still works after the rebuild
+        c.execute_batch("DELETE FROM students WHERE id = 1").unwrap();
+        let n: i64 = c.query_row("SELECT COUNT(*) FROM fee_ledger", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

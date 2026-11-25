@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isCoaching, placement } from '../lib/groups';
 import { Eye, EyeOff, Printer, Phone, MapPin, Droplet, Wallet, PenLine, CalendarCheck, FileText, Pencil } from 'lucide-react';
 import { useApp } from './AppContext';
 import { Modal, Badge, Empty } from './ui';
@@ -10,6 +11,7 @@ import { loadStudentFinance, type FeeHead, type LedgerRow, type Student } from '
 import { calculate, type MarkLine } from '../lib/grading';
 import { fmtDate, money, monthKey } from '../lib/util';
 
+interface CResult { id: number; name: string; exam_date: string; full_marks: number; pass_marks: number; obtained: number | null; absent: number; remark: string | null; position: number; appeared: number }
 interface ResultRow { id: number; exam: string; academic_year: number; marks_json: string; obtained: number; total_full: number; percentage: number; gpa: number; grade: string; passed: number }
 
 /** Omnibox target: Personal profile + fee/due history FIRST; results hidden until "View Result". */
@@ -21,9 +23,10 @@ export default function StudentProfile() {
   const [results, setResults] = useState<ResultRow[] | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [print, setPrint] = useState<ResultRow | null>(null);
+  const [cResults, setCResults] = useState<CResult[] | null>(null);
 
   useEffect(() => {
-    setShowResult(false); setResults(null); setFin(null);
+    setShowResult(false); setResults(null); setCResults(null); setFin(null);
     if (!openStudentId) return setS(null);
     db.one<Student>('SELECT * FROM students WHERE id = ?', [openStudentId]).then(async (st) => {
       setS(st);
@@ -33,6 +36,16 @@ export default function StudentProfile() {
 
   async function revealResults() {
     setShowResult(true);
+    if (isCoaching(settings)) {
+      // position = 1 + number of students with higher marks in the same exam
+      setCResults(await db.select<CResult>(`
+        SELECT e.id, e.name, e.exam_date, e.full_marks, e.pass_marks, m.obtained, m.absent, m.remark,
+               (SELECT COUNT(*) FROM coaching_marks x WHERE x.exam_id = e.id AND x.obtained > m.obtained) + 1 AS position,
+               (SELECT COUNT(*) FROM coaching_marks x WHERE x.exam_id = e.id AND x.obtained IS NOT NULL) AS appeared
+          FROM coaching_marks m JOIN coaching_exams e ON e.id = m.exam_id
+         WHERE m.student_id = ? ORDER BY e.exam_date DESC`, [openStudentId]));
+      return;
+    }
     setResults(await db.select<ResultRow>('SELECT * FROM exam_results WHERE student_id = ? ORDER BY academic_year DESC, exam DESC', [openStudentId]));
   }
 
@@ -56,8 +69,7 @@ export default function StudentProfile() {
             <h2 className="text-xl font-bold">{s.name_en}</h2>
             {s.name_bn && <div className="bn text-lg text-slate-600">{s.name_bn}</div>}
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge tone="brand">Class {s.class_no}{settings.modules.sections && s.section ? ` · Sec ${s.section}` : ''}</Badge>
-              {s.stream && <Badge tone="slate">{s.stream}</Badge>}
+              <Badge tone="brand">{placement(settings, s)}</Badge>
               <Badge tone="slate">Roll {s.roll}</Badge>
               <Badge tone={s.status === 'active' ? 'ok' : 'slate'}>{s.status}</Badge>
             </div>
@@ -110,6 +122,23 @@ export default function StudentProfile() {
             <button className={showResult ? 'btn-ghost' : 'btn-primary'} onClick={() => (showResult ? setShowResult(false) : revealResults())}>
               {showResult ? <><EyeOff size={16} /> Hide Result</> : <><Eye size={16} /> {t('viewResult')}</>}
             </button>
+            {showResult && cResults && (
+              <div className="mt-3 overflow-hidden rounded-lg border border-line">
+                <table className="table">
+                  <thead><tr><th>Date</th><th>Exam</th><th>Marks</th><th>%</th><th>Position</th><th>Remark</th></tr></thead>
+                  <tbody>{cResults.map((r) => {
+                    const pct = r.absent || r.obtained == null ? null : Math.round((r.obtained / r.full_marks) * 1000) / 10;
+                    return (
+                      <tr key={r.id}><td className="whitespace-nowrap">{fmtDate(r.exam_date)}</td><td className="font-medium">{r.name}</td>
+                        <td>{r.absent ? <Badge tone="bad">Absent</Badge> : `${r.obtained ?? '—'} / ${r.full_marks}`}</td>
+                        <td>{pct != null ? <Badge tone={(r.obtained ?? 0) >= r.pass_marks ? 'ok' : 'bad'}>{pct}%</Badge> : ''}</td>
+                        <td>{pct != null ? `${r.position} / ${r.appeared}` : ''}</td><td className="text-xs">{r.remark}</td></tr>
+                    );
+                  })}</tbody>
+                </table>
+                {!cResults.length && <p className="p-4 text-sm text-slate-400">No exam marks yet.</p>}
+              </div>
+            )}
             {showResult && results && (
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {results.map((r) => (

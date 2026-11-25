@@ -6,6 +6,7 @@ import StudentSearch from '../components/StudentSearch';
 import PrintPreview from '../components/PrintPreview';
 import { FeeReceipt } from '../docs/Documents';
 import { db } from '../lib/db';
+import { placement } from '../lib/groups';
 import { headLabel, loadStudentFinance, type FeeHead, type LedgerRow, type Student } from '../lib/fees';
 import { studentMonth, type MonthlyAttendance } from '../lib/attendance';
 import { MONTHS, fmtDate, money, monthKey, pad2, todayISO, uid } from '../lib/util';
@@ -78,7 +79,7 @@ export default function Fees({ focus }: { focus?: { id: number; n: number } | nu
       {st && fin ? (
         <div className="grid gap-5 xl:grid-cols-5">
           <div className="space-y-5 xl:col-span-3">
-            <Card title={<span className="flex items-center gap-3">{st.photo && <img src={st.photo} className="h-10 w-9 rounded object-cover" />}<span>{st.name_en} <span className="text-sm font-normal text-slate-500">· {st.student_id} · Class {st.class_no}{st.section ? `-${st.section}` : ''} · Roll {st.roll}</span></span></span>}
+            <Card title={<span className="flex items-center gap-3">{st.photo && <img src={st.photo} className="h-10 w-9 rounded object-cover" />}<span>{st.name_en} <span className="text-sm font-normal text-slate-500">· {st.student_id} · {placement(settings, st)} · Roll {st.roll}</span></span></span>}
               actions={<><Badge tone={fin.totalDue ? 'due' : 'ok'}>Cumulative due {money(fin.totalDue)}</Badge><button className="btn-ghost btn-sm" onClick={() => { setSt(null); setFin(null); }}><X size={14} /></button></>}>
               <div className="grid gap-4 p-4 md:grid-cols-2">
                 <Field label="Fee head"><select className="input" value={head} onChange={(e) => setHead(e.target.value)}>

@@ -6,9 +6,10 @@ import ClassPicker from '../components/ClassPicker';
 import PrintPreview from '../components/PrintPreview';
 import { DocHeader, Signatures } from '../docs/Documents';
 import { db, type Param } from '../lib/db';
+import { groupLabel, groups, terms } from '../lib/groups';
 import { summarise } from '../lib/attendance';
 import { saveTextFile } from '../lib/platform';
-import { CLASSES, MONTHS, dateOf, daysInMonth, fmtDate, isFriday, monthKey, monthLabel, toCsv, todayISO } from '../lib/util';
+import { MONTHS, dateOf, daysInMonth, fmtDate, isFriday, monthKey, monthLabel, toCsv, todayISO } from '../lib/util';
 
 type View = 'mark' | 'summary' | 'monthly';
 
@@ -33,7 +34,7 @@ interface Roster { id: number; roll: number; name_en: string; name_bn: string | 
 function MarkDaily() {
   const { settings, toast, bump } = useApp();
   const [date, setDate] = useState(todayISO());
-  const [sel, setSel] = useState({ classNo: 1, section: 'A', stream: null as string | null });
+  const [sel, setSel] = useState({ classNo: groups(settings)[0]?.no ?? 1, section: 'A', stream: null as string | null });
   const [rows, setRows] = useState<Roster[]>([]);
   const [present, setPresent] = useState<Set<number>>(new Set());
   const [already, setAlready] = useState(false);
@@ -90,7 +91,7 @@ function MarkDaily() {
           );
         })}
       </div>
-      {!rows.length && <Empty>No students in this class{useSections ? '/section' : ''}.</Empty>}
+      {!rows.length && <Empty>No students in this {terms(settings).group.toLowerCase()}{useSections ? '/section' : ''}.</Empty>}
       {rows.length > 0 && (
         <div className="flex items-center justify-between border-t border-line px-4 py-3">
           <span className="text-sm text-slate-600"><b className="text-ok">{present.size}</b> present · <b className="text-bad">{rows.length - present.size}</b> absent · {rows.length} total</span>
@@ -131,8 +132,8 @@ function DailySummary() {
 
   function csvFor(cls: number | null) {
     const list = cls ? rows.filter((r) => r.class_no === cls) : rows;
-    return toCsv([['Date', 'Class', 'Section', 'Enrolled', 'Present', 'Absent', 'Attendance %', 'Absent Rolls & Names'],
-      ...list.map((r) => [date, r.class_no, r.section, r.enrolled, r.present, r.absent, pct(r.present, r.absent), r.absentees.map((a) => `${a.roll}-${a.name_en}`).join('; ')])]);
+    return toCsv([['Date', terms(settings).group, 'Section', 'Enrolled', 'Present', 'Absent', 'Attendance %', 'Absent Rolls & Names'],
+      ...list.map((r) => [date, groupLabel(settings, r.class_no), r.section, r.enrolled, r.present, r.absent, pct(r.present, r.absent), r.absentees.map((a) => `${a.roll}-${a.name_en}`).join('; ')])]);
   }
   async function classRoster(cls: number) {
     return db.select<{ roll: number; name_en: string; section: string; status: string | null }>(
@@ -140,7 +141,7 @@ function DailySummary() {
   }
   async function classCsv(cls: number) {
     const roster = await classRoster(cls);
-    const body = [['Date', 'Class', 'Section', 'Roll', 'Name', 'Status'], ...roster.map((r) => [date, cls, r.section, r.roll, r.name_en, r.status === 'P' ? 'Present' : r.status === 'A' ? 'Absent' : 'Not marked'])];
+    const body = [['Date', terms(settings).group, 'Section', 'Roll', 'Name', 'Status'], ...roster.map((r) => [date, groupLabel(settings, cls), r.section, r.roll, r.name_en, r.status === 'P' ? 'Present' : r.status === 'A' ? 'Absent' : 'Not marked'])];
     await saveTextFile(`attendance-${date}-class-${cls}.csv`, csvFor(cls) + '\r\n\r\n' + toCsv(body).slice(1), 'text/csv');
   }
 
@@ -150,7 +151,7 @@ function DailySummary() {
       <Card>
         <div className="grid gap-4 p-4 md:grid-cols-5">
           <Field label="Date"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-          <Field label="Class filter"><select className="input" value={classNo} onChange={(e) => setClassNo(Number(e.target.value))}><option value={0}>All Classes (1–10)</option>{CLASSES.map((c) => <option key={c} value={c}>Class {c}</option>)}</select></Field>
+          <Field label={`${terms(settings).group} filter`}><select className="input" value={classNo} onChange={(e) => setClassNo(Number(e.target.value))}><option value={0}>{terms(settings).allGroups}</option>{groups(settings).map((g) => <option key={g.no} value={g.no}>{g.label}</option>)}</select></Field>
           <div className="flex items-end gap-2 md:col-span-3">
             <button className="btn-ghost" onClick={() => saveTextFile(`attendance-summary-${date}${classNo ? `-class-${classNo}` : ''}.csv`, csvFor(null), 'text/csv')}><Download size={16} /> Download CSV</button>
             <button className="btn-ghost" onClick={async () => setPrintFor({ classNo, roster: classNo ? await classRoster(classNo) : null })}><Printer size={16} /> Print / Save A4 Summary PDF</button>
@@ -163,14 +164,14 @@ function DailySummary() {
         <Kpi label="Absent" value={tot.absent} icon={<XCircle />} tone="bad" />
         <Kpi label="Attendance %" value={pct(tot.present, tot.absent)} icon={<CheckCheck />} tone="brand" />
       </div>
-      <Card title={`Class / Section breakdown — ${fmtDate(date)}`}>
+      <Card title={`${terms(settings).group} / Section breakdown — ${fmtDate(date)}`}>
         <div className="overflow-x-auto">
           <table className="table">
-            <thead><tr><th>Class</th>{settings.modules.sections && <th>Section</th>}<th>Enrolled</th><th>Present</th><th>Absent</th><th>%</th><th>Absent students</th><th className="text-right">Export</th></tr></thead>
+            <thead><tr><th>{terms(settings).group}</th>{settings.modules.sections && <th>Section</th>}<th>Enrolled</th><th>Present</th><th>Absent</th><th>%</th><th>Absent students</th><th className="text-right">Export</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.class_no}${r.section}`}>
-                  <td className="font-semibold">Class {r.class_no}</td>{settings.modules.sections && <td>{r.section}</td>}
+                  <td className="font-semibold">{groupLabel(settings, r.class_no)}</td>{settings.modules.sections && <td>{r.section}</td>}
                   <td>{r.enrolled}</td><td className="text-ok">{r.present}</td><td className="text-bad">{r.absent}</td><td>{pct(r.present, r.absent)}</td>
                   <td className="max-w-md text-xs">{r.present + r.absent === 0 ? <span className="text-slate-400">Not taken</span> : r.absentees.map((a) => <span key={a.roll} className="mr-1 inline-block rounded bg-red-50 px-1.5 py-0.5 text-bad">{a.roll} · {a.name_en}</span>)}</td>
                   <td className="whitespace-nowrap text-right">
@@ -186,10 +187,10 @@ function DailySummary() {
       </Card>
       <PrintPreview open={!!printFor} onClose={() => setPrintFor(null)} title="Daily attendance summary">
         <div className="a4">
-          <DocHeader school={settings.school} title="Daily Attendance Summary" subtitle={`${fmtDate(date)} · ${printFor?.classNo ? `Class ${printFor.classNo}` : 'All Classes'}`} />
+          <DocHeader school={settings.school} title="Daily Attendance Summary" subtitle={`${fmtDate(date)} · ${printFor?.classNo ? groupLabel(settings, printFor.classNo) : terms(settings).allGroups}`} />
           <table className="doc text-[11px]">
-            <thead><tr><th>Class</th><th>Section</th><th>Enrolled</th><th>Present</th><th>Absent</th><th>%</th><th>Absent Rolls & Names</th></tr></thead>
-            <tbody>{printRows.map((r) => <tr key={`${r.class_no}${r.section}`}><td>{r.class_no}</td><td>{r.section}</td><td>{r.enrolled}</td><td>{r.present}</td><td>{r.absent}</td><td>{pct(r.present, r.absent)}</td><td>{r.absentees.map((a) => `${a.roll}-${a.name_en}`).join(', ')}</td></tr>)}</tbody>
+            <thead><tr><th>{terms(settings).group}</th><th>Section</th><th>Enrolled</th><th>Present</th><th>Absent</th><th>%</th><th>Absent Rolls & Names</th></tr></thead>
+            <tbody>{printRows.map((r) => <tr key={`${r.class_no}${r.section}`}><td>{groupLabel(settings, r.class_no)}</td><td>{r.section}</td><td>{r.enrolled}</td><td>{r.present}</td><td>{r.absent}</td><td>{pct(r.present, r.absent)}</td><td>{r.absentees.map((a) => `${a.roll}-${a.name_en}`).join(', ')}</td></tr>)}</tbody>
           </table>
           {printFor?.roster && (
             <>
@@ -200,7 +201,7 @@ function DailySummary() {
               </table>
             </>
           )}
-          <Signatures labels={['Class Teacher', 'Assistant Head Teacher', 'Principal Signature & Seal']} />
+          <Signatures labels={[terms(settings).teacher, 'Assistant Head', `${terms(settings).head} Signature & Seal`]} />
         </div>
       </PrintPreview>
     </div>
@@ -210,7 +211,7 @@ function DailySummary() {
 // ---------------------------------------------------------------- 3. Monthly matrix
 function MonthlyMatrix() {
   const { settings } = useApp();
-  const [sel, setSel] = useState({ classNo: 1, section: '', stream: null as string | null });
+  const [sel, setSel] = useState({ classNo: groups(settings)[0]?.no ?? 1, section: '', stream: null as string | null });
   const [ym, setYm] = useState(monthKey());
   const [students, setStudents] = useState<{ id: number; roll: number; name_en: string; section: string }[]>([]);
   const [marks, setMarks] = useState<Map<string, 'P' | 'A'>>(new Map());
@@ -232,7 +233,7 @@ function MonthlyMatrix() {
     return { s, sum: summarise(ym, m) };
   }), [students, marks, ym, days]);
 
-  const title = `Class ${sel.classNo}${sel.section ? ` · Section ${sel.section}` : ''} · ${monthLabel(ym)}`;
+  const title = `${groupLabel(settings, sel.classNo)}${sel.section ? ` · Section ${sel.section}` : ''} · ${monthLabel(ym)}`;
   function csv() {
     const header = ['Roll', 'Name', ...Array.from({ length: days }, (_, i) => String(i + 1).padStart(2, '0')), 'P', 'A', '%'];
     saveTextFile(`attendance-matrix-class-${sel.classNo}${sel.section}-${ym}.csv`, toCsv([header, ...matrix.map(({ s, sum }) => [s.roll, s.name_en, ...sum.days.map((d) => (d.status === '-' ? '' : d.status)), sum.present, sum.absent, sum.pct])]), 'text/csv');
@@ -284,9 +285,9 @@ function MonthlyMatrix() {
       </Card>
       <PrintPreview open={print} onClose={() => setPrint(false)} title="Monthly attendance grid (A4 landscape)">
         <div className="a4 a4-landscape">
-          <DocHeader school={settings.school} title="Monthly Class Attendance Sheet" subtitle={title} />
+          <DocHeader school={settings.school} title={`Monthly ${terms(settings).group} Attendance Sheet`} subtitle={title} />
           <Grid compact />
-          <Signatures labels={['Class Teacher', 'Principal Signature & Seal']} />
+          <Signatures labels={[terms(settings).teacher, `${terms(settings).head} Signature & Seal`]} />
         </div>
       </PrintPreview>
     </div>

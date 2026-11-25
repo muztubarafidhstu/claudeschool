@@ -6,6 +6,7 @@
  */
 import { isTauri, invoke } from './platform';
 import migration001 from '../../src-tauri/migrations/001_init.sql?raw';
+import migration002 from '../../src-tauri/migrations/002_coaching.sql?raw';
 
 export type Param = string | number | null | boolean;
 export type Row = Record<string, any>;
@@ -50,7 +51,12 @@ async function makeBrowserDriver(): Promise<Driver> {
   const db = saved ? new SQL.Database(saved) : new SQL.Database();
   db.exec('PRAGMA foreign_keys = ON;');
   const v = (db.exec('PRAGMA user_version')[0]?.values[0]?.[0] as number) ?? 0;
-  if (v < 1) db.exec(`BEGIN; ${migration001}; PRAGMA user_version = 1; COMMIT;`);
+  if (v < 2) {
+    db.exec('PRAGMA foreign_keys = OFF;'); // table rebuilds must not cascade
+    if (v < 1) db.exec(`BEGIN; ${migration001}; PRAGMA user_version = 1; COMMIT;`);
+    db.exec(`BEGIN; ${migration002}; PRAGMA user_version = 2; COMMIT;`);
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
   let timer: number | undefined;
   const persist = () => { clearTimeout(timer); timer = window.setTimeout(() => idbPut(db.export()), 400); };
   const norm = (p: Param[]) => p.map((x) => (typeof x === 'boolean' ? (x ? 1 : 0) : x));
@@ -94,4 +100,4 @@ export const db = {
   batch: async (stmts: Stmt[]) => (stmts.length ? (await driver()).batch(stmts) : 0),
 };
 
-export const TABLES = ['students', 'fee_ledger', 'attendance_logs', 'exam_results', 'staff', 'salary_ledger'] as const;
+export const TABLES = ['students', 'fee_ledger', 'attendance_logs', 'exam_results', 'staff', 'salary_ledger', 'coaching_exams', 'coaching_marks'] as const;

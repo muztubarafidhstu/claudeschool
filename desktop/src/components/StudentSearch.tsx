@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useApp } from './AppContext';
+import { placement } from '../lib/groups';
 import { Search } from 'lucide-react';
 import { db } from '../lib/db';
 import type { Student } from '../lib/fees';
@@ -21,6 +23,7 @@ export async function searchStudents(q: string, limit = 12): Promise<Student[]> 
 }
 
 export default function StudentSearch({ onPick, placeholder = 'Student ID, roll or guardian mobile…', autoFocus }: { onPick: (s: Student) => void; placeholder?: string; autoFocus?: boolean }) {
+  const { settings } = useApp();
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<Student[]>([]);
   useEffect(() => { const h = setTimeout(() => searchStudents(q).then(setRows), 150); return () => clearTimeout(h); }, [q]);
@@ -35,7 +38,7 @@ export default function StudentSearch({ onPick, placeholder = 'Student ID, roll 
               {s.photo ? <img src={s.photo} className="h-9 w-8 rounded object-cover" /> : <div className="h-9 w-8 rounded bg-slate-100" />}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold">{s.name_en} {s.name_bn && <span className="bn font-normal text-slate-500">· {s.name_bn}</span>}</div>
-                <div className="text-xs text-slate-500">ID {s.student_id} · Class {s.class_no}{s.section ? `-${s.section}` : ''}{s.stream ? ` ${s.stream}` : ''} · Roll {s.roll} · {s.father_mobile}</div>
+                <div className="text-xs text-slate-500">ID {s.student_id} · {placement(settings, s)} · Roll {s.roll} · {s.father_mobile}</div>
               </div>
             </button>
           ))}

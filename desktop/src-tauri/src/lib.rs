@@ -64,8 +64,37 @@ fn backup_read(dir: String, name: String) -> CmdResult<String> {
 }
 
 #[tauri::command]
+fn photo_write(dir: String, name: String, data_url: String) -> CmdResult<String> {
+    backupfs::write_photo(&dir, &name, &data_url)
+}
+
+#[tauri::command]
 fn backup_prune(dir: String, keep: usize) -> CmdResult<usize> {
     backupfs::prune(&dir, keep)
+}
+
+/// Generic HTTP call for SMS gateways (paid SMS APIs or the owner's ESP32 GSM gateway on the LAN).
+/// Done in Rust so any gateway URL works without widening the webview's HTTP allow-list.
+#[tauri::command]
+async fn http_request(method: String, url: String, content_type: Option<String>, body: Option<String>) -> CmdResult<(u16, String)> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("Gateway URL must start with http:// or https://".into());
+    }
+    let client = tauri_plugin_http::reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(25))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = if method.eq_ignore_ascii_case("POST") { client.post(&url) } else { client.get(&url) };
+    if let Some(ct) = content_type.filter(|c| !c.is_empty()) {
+        req = req.header("content-type", ct);
+    }
+    if let Some(b) = body.filter(|b| !b.is_empty()) {
+        req = req.body(b);
+    }
+    let res = req.send().await.map_err(|e| format!("Could not reach the SMS gateway: {e}"))?;
+    let status = res.status().as_u16();
+    let text = res.text().await.unwrap_or_default();
+    Ok((status, text.chars().take(2000).collect()))
 }
 
 #[tauri::command]
@@ -106,6 +135,8 @@ pub fn run() {
             backup_list,
             backup_read,
             backup_prune,
+            photo_write,
+            http_request,
             start_oauth_listener
         ])
         .run(tauri::generate_context!())

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { groupLabel, placement, terms } from '../lib/groups';
 import { Download, Printer, Pencil, Trash2, Eye, Search } from 'lucide-react';
 import { useApp } from '../components/AppContext';
 import { Card, Empty } from '../components/ui';
@@ -27,7 +28,7 @@ export default function Students({ onEdit }: { onEdit: (id: number) => void }) {
     return () => clearTimeout(h);
   }, [filter, q, dataVersion, settings.modules.sections]);
 
-  const title = filter.classNo ? `Class ${filter.classNo}${filter.section ? ` · Section ${filter.section}` : ''}${filter.stream ? ` · ${filter.stream}` : ''}` : 'All Classes';
+  const title = filter.classNo ? `${groupLabel(settings, filter.classNo)}${filter.section ? ` · Section ${filter.section}` : ''}${filter.stream ? ` · ${filter.stream}` : ''}` : terms(settings).allGroups;
 
   async function remove(s: Student) {
     if (!(await requirePin('modify', `Delete ${s.name_en} (${s.student_id}) and all fee, attendance and result records?`))) return;
@@ -49,18 +50,18 @@ export default function Students({ onEdit }: { onEdit: (id: number) => void }) {
         </div>
       </Card>
       <Card title={`${title} — ${rows.length} students`} actions={<>
-        <button className="btn-ghost btn-sm" onClick={() => saveTextFile(`contacts-${title.replace(/\W+/g, '-')}.csv`, toCsv([['Student ID', 'Class', 'Section', 'Stream', 'Roll', 'Name', 'Name (Bangla)', "Father's Name", 'Mobile Number', "Mother's Mobile"], ...rows.map((s) => [s.student_id, s.class_no, s.section, s.stream, s.roll, s.name_en, s.name_bn, s.father_name, s.father_mobile, s.mother_mobile])]), 'text/csv')}><Download size={14} /> Export contacts CSV</button>
+        <button className="btn-ghost btn-sm" onClick={() => saveTextFile(`contacts-${title.replace(/\W+/g, '-')}.csv`, toCsv([['Student ID', terms(settings).group, 'Section', 'Stream', 'Roll', 'Name', 'Name (Bangla)', "Father's Name", 'Mobile Number', "Mother's Mobile"], ...rows.map((s) => [s.student_id, groupLabel(settings, s.class_no), s.section, s.stream, s.roll, s.name_en, s.name_bn, s.father_name, s.father_mobile, s.mother_mobile])]), 'text/csv')}><Download size={14} /> Export contacts CSV</button>
         <button className="btn-ghost btn-sm" onClick={() => setPrint(true)}><Printer size={14} /> Print directory</button>
       </>}>
         <div className="overflow-x-auto">
           <table className="table">
-            <thead><tr><th>Photo</th><th>ID</th><th>Class</th><th>Roll</th><th>Name</th><th>Father's Name</th><th>Mobile</th><th className="text-right">Actions</th></tr></thead>
+            <thead><tr><th>Photo</th><th>ID</th><th>{terms(settings).group}</th><th>Roll</th><th>Name</th><th>Father's Name</th><th>Mobile</th><th className="text-right">Actions</th></tr></thead>
             <tbody>
               {rows.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td>{s.photo ? <img src={s.photo} className="h-9 w-8 rounded object-cover" /> : <div className="grid h-9 w-8 place-items-center rounded bg-slate-100 text-xs text-slate-400">{s.name_en[0]}</div>}</td>
                   <td className="font-mono text-xs">{s.student_id}</td>
-                  <td>{s.class_no}{settings.modules.sections && s.section ? `-${s.section}` : ''}{s.stream ? <span className="text-xs text-slate-400"> {s.stream}</span> : ''}</td>
+                  <td>{placement(settings, s)}</td>
                   <td>{s.roll}</td>
                   <td><button className="text-left font-medium hover:text-brand" onClick={() => openStudent(s.id)}>{s.name_en}</button>{s.name_bn && <div className="bn text-xs text-slate-500">{s.name_bn}</div>}</td>
                   <td>{s.father_name}</td>

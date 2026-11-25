@@ -3736,6 +3736,7 @@ dependencies = [
 name = "scholardesk-pro"
 version = "1.0.0"
 dependencies = [
+ "base64 0.22.1",
  "hex",
  "hmac",
  "jsonwebtoken",

@@ -9,22 +9,26 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; }
-body { background: #F8FAFC; color: #0F172A; -webkit-font-smoothing: antialiased; }
+body { background: #F4F7FA; color: #0F172A; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: #94A3B8; }
 .bn { font-family: 'Noto Sans Bengali', Inter, sans-serif; }
 
 @layer components {
-  .card { @apply rounded-xl border border-line bg-white; }
+  .card { @apply rounded-2xl border border-line/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_16px_rgba(15,23,42,0.04)]; }
   .btn { @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-primary { @apply btn bg-brand text-white shadow-sm hover:bg-brand-dark; }
-  .btn-ghost { @apply btn border border-line bg-white text-slate-700 hover:bg-slate-50; }
+  .btn-primary { @apply btn bg-gradient-to-b from-[#14A89B] to-brand text-white shadow-sm shadow-brand/30 hover:from-brand hover:to-brand-dark active:translate-y-px; }
+  .btn-ghost { @apply btn border border-line bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 active:translate-y-px; }
   .btn-danger { @apply btn bg-bad text-white hover:bg-red-600; }
   .btn-sm { @apply px-2.5 py-1.5 text-xs; }
   .input { @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand-soft disabled:bg-slate-50; }
   .label { @apply mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500; }
   .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold; }
   .table { @apply w-full text-sm; }
-  .table th { @apply bg-slate-50 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500; }
+  .table th { @apply sticky top-0 z-[1] bg-slate-50/95 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 backdrop-blur; }
   .table td { @apply border-t border-slate-100 px-3 py-2.5; }
+  .table tbody tr { @apply transition-colors; }
   .tab { @apply rounded-lg px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100; }
   .tab-active { @apply bg-brand text-white hover:bg-brand; }
 }

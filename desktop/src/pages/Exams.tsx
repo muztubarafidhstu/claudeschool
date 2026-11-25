@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, Save, Lock, Trophy } from 'lucide-react';
+import { Printer, Save, Lock, Trophy, MessageSquare } from 'lucide-react';
 import { useApp } from '../components/AppContext';
 import { Badge, Card, Empty, Field, Modal, Tabs } from '../components/ui';
 import ClassPicker from '../components/ClassPicker';
@@ -7,6 +7,9 @@ import StudentSearch from '../components/StudentSearch';
 import PrintPreview from '../components/PrintPreview';
 import { Marksheet } from '../docs/Documents';
 import { db, type Param } from '../lib/db';
+import { groupLabel, placement } from '../lib/groups';
+import { fillTemplate } from '../lib/sms';
+import SmsSendModal from '../components/SmsSendModal';
 import { subjectGroup } from '../lib/config';
 import { calculate, type MarkLine } from '../lib/grading';
 import type { Student } from '../lib/fees';
@@ -21,6 +24,7 @@ export default function Exams({ focus }: { focus?: { id: number; n: number } | n
   const [students, setStudents] = useState<Student[]>([]);
   const [results, setResults] = useState<Map<number, ResultRow>>(new Map());
   const [open, setOpen] = useState<Student | null>(null);
+  const [sms, setSms] = useState(false);
   const year = settings.academicYear;
 
   useEffect(() => {
@@ -55,7 +59,7 @@ export default function Exams({ focus }: { focus?: { id: number; n: number } | n
           <div className="md:col-span-2"><span className="label">Quick find student</span><StudentSearch onPick={(s) => setOpen(s)} /></div>
         </div>
       </Card>
-      <Card title={`Class ${sel.classNo} — ${done}/${students.length} results entered`}>
+      <Card title={`${groupLabel(settings, sel.classNo)} — ${done}/${students.length} results entered`} actions={done > 0 ? <button className="btn-ghost btn-sm" onClick={() => setSms(true)}><MessageSquare size={14} /> Send result SMS</button> : null}>
         <div className="overflow-x-auto">
           <table className="table">
             <thead><tr><th>Roll</th><th>Name</th>{sel.classNo >= 9 && <th>Stream</th>}<th>Obtained</th><th>%</th><th>GPA</th><th>Grade</th><th>Merit</th><th /></tr></thead>
@@ -80,6 +84,14 @@ export default function Exams({ focus }: { focus?: { id: number; n: number } | n
         </div>
       </Card>
       {open && <MarksModal student={open} initialExam={exam} onClose={() => setOpen(null)} />}
+      {sms && <SmsSendModal title={`Send result SMS · ${exam === 'FINAL' ? 'Final' : 'Half Yearly'} Exam ${year}`} onClose={() => setSms(false)}
+        items={students.filter((st) => results.has(st.id)).map((st) => {
+          const r = results.get(st.id)!;
+          return { key: st.id, label: `${st.roll} · ${st.name_en}`, to: st.father_mobile, msg: fillTemplate(settings.sms.resultTemplate, {
+            name: st.name_en, roll: st.roll, group: placement(settings, st), exam: `${exam === 'FINAL' ? 'Final' : 'Half Yearly'} Exam ${year}`, date: '',
+            marks: r.obtained, full: r.total_full, percent: r.percentage, position: ranked.indexOf(st.id) + 1, total: ranked.length,
+            remark: `GPA ${r.gpa.toFixed(2)} (${r.grade}).`, school: settings.school.name }) };
+        })} />}
     </div>
   );
 }
@@ -120,7 +132,7 @@ function MarksModal({ student, initialExam, onClose }: { student: Student; initi
 
   return (
     <>
-      <Modal open onClose={onClose} width="max-w-3xl" title={`Marks Entry · ${student.name_en} · Class ${student.class_no}${student.stream ? ` ${student.stream}` : ''} · Roll ${student.roll}`}
+      <Modal open onClose={onClose} width="max-w-3xl" title={`Marks Entry · ${student.name_en} · ${placement(settings, student)} · Roll ${student.roll}`}
         footer={<>
           {existing && <button className="btn-ghost" onClick={() => setPrint('view')}><Printer size={16} /> Print saved marksheet</button>}
           <button className="btn-ghost" onClick={save}>{existing ? <Lock size={16} /> : <Save size={16} />} {existing ? 'Update only (PIN)' : 'Submit only'}</button>

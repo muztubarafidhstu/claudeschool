@@ -26,7 +26,8 @@ const mobile = () => `01${pick(['3', '7', '8', '9', '5', '6'])}${String(Math.flo
 
 export async function importDemoData(settings: AppSettings, perClass = 25) {
   const existing = await db.one<{ n: number }>('SELECT COUNT(*) AS n FROM students');
-  if (existing && existing.n > 0) throw new Error('Demo data can only be imported into an empty school database.');
+  if (existing && existing.n > 0) throw new Error('Demo data can only be imported into an empty database.');
+  if (settings.product === 'COACHING') return importCoachingDemo(settings);
   const year = settings.academicYear;
   const now = new Date();
   const thisMonth = monthKey(now);
@@ -109,4 +110,98 @@ export async function importDemoData(settings: AppSettings, perClass = 25) {
 
   await db.batch(stmts);
   return { students: stu.length, staff: STAFF.length, statements: stmts.length };
+}
+
+// ------------------------------------------------------------------------------------------ coaching demo
+const COACHING_TEACHERS: [string, string, string, 'MONTHLY' | 'DAILY' | 'PER_CLASS', number][] = [
+  ['Md. Rakibul Hasan', 'মো. রাকিবুল হাসান', 'Director & Physics Teacher', 'MONTHLY', 30000],
+  ['Tahmina Akter', 'তাহমিনা আক্তার', 'Chemistry Teacher', 'MONTHLY', 22000],
+  ['Shafiqul Islam', 'শফিকুল ইসলাম', 'Mathematics Teacher', 'PER_CLASS', 400],
+  ['Nusrat Jahan', 'নুসরাত জাহান', 'English Teacher', 'PER_CLASS', 350],
+  ['Arif Hossain', 'আরিফ হোসেন', 'ICT Teacher', 'DAILY', 800],
+  ['Mitu Rani Das', 'মিতু রানী দাস', 'Biology Teacher', 'DAILY', 700],
+  ['Kamrul Ahsan', 'কামরুল আহসান', 'Accounting Teacher', 'MONTHLY', 18000],
+  ['Rubina Yasmin', 'রুবিনা ইয়াসমিন', 'Office Assistant', 'MONTHLY', 9000],
+];
+const EXAM_PLAN = [
+  { name: 'Weekly Test 1', full: 50, pass: 17, note: 'Chapter 1–2 · MCQ 25 + Written 25', day: 6 },
+  { name: 'Weekly Test 2', full: 50, pass: 17, note: 'Chapter 3–4 · MCQ 25 + Written 25', day: 13 },
+  { name: 'Model Test 1', full: 100, pass: 33, note: 'Full syllabus model test (board pattern) · 3 hours', day: 20 },
+];
+
+async function importCoachingDemo(settings: AppSettings) {
+  const year = new Date().getFullYear();
+  const now = new Date();
+  const thisMonth = monthKey(now);
+  const prevMonth = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const today = todayISO();
+  const startMonth = prevMonth; // coaching students joined last month
+  const admissionDate = `${startMonth}-03`;
+  const batches = settings.batches.filter((b) => b.active);
+  const stmts: Stmt[] = [];
+  let id = 0;
+  const stu: { id: number; batch: number; skill: number }[] = [];
+  batches.forEach((b, bi) => {
+    const monthly = 800 + (bi % 6) * 300;
+    const admission = 500 + (bi % 3) * 250;
+    const count = 12 + (bi % 4) * 2;
+    for (let r = 1; r <= count; r++) {
+      id++;
+      const girl = rnd() < 0.5;
+      const [fn, fnBn] = pick(girl ? GIRLS : BOYS);
+      const [sn, snBn] = pick(SURNAMES);
+      stmts.push({
+        sql: `INSERT INTO students(id, student_id, admission_year, admission_date, class_no, section, stream, roll, name_en, name_bn, gender, dob, blood_group,
+              father_name, father_mobile, mother_name, mother_mobile, address, monthly_fee, admission_fee) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        params: [id, makeStudentId(year, b.no, r), year, admissionDate, b.no, 'A', null, r, `${fn} ${sn}`, `${fnBn} ${snBn}`, girl ? 'Female' : 'Male',
+          `${year - 12 - (bi % 6)}-${pad2(1 + Math.floor(rnd() * 12))}-${pad2(1 + Math.floor(rnd() * 28))}`, pick(['A+', 'B+', 'O+', 'AB+']),
+          `${pick(FATHERS)} ${sn}`, mobile(), `Mrs. ${pick(SURNAMES)[0]}`, mobile(), pick(AREAS), monthly, admission],
+      });
+      stu.push({ id, batch: b.no, skill: 0.35 + rnd() * 0.6 });
+      stmts.push({ sql: 'INSERT INTO fee_ledger(student_id, receipt_no, fee_type, period, regular_amount, paid_amount, due_after, paid_on) VALUES (?,?,?,?,?,?,?,?)',
+        params: [id, `R-ADM-${id}`, 'ADMISSION', 'ADMISSION', admission, admission, 0, admissionDate] });
+      for (const m of [prevMonth, thisMonth]) {
+        const roll = rnd();
+        if (m === thisMonth && roll < 0.3) continue;
+        const paid = m === thisMonth && roll < 0.4 ? Math.round(monthly / 2) : monthly;
+        stmts.push({ sql: 'INSERT INTO fee_ledger(student_id, receipt_no, fee_type, period, regular_amount, paid_amount, due_after, paid_on) VALUES (?,?,?,?,?,?,?,?)',
+          params: [id, `R-${m.replace('-', '')}-${id}`, 'MONTHLY', m, monthly, paid, monthly - paid, `${m}-${pad2(Math.min(8, daysInMonth(m)))}`] });
+      }
+    }
+  });
+  // attendance (coaching classes ~4 days a week: skip Fridays and Tuesdays)
+  for (const ym of [prevMonth, thisMonth]) {
+    for (let d = 1; d <= daysInMonth(ym); d++) {
+      const date = dateOf(ym, d);
+      if (date > today || isFriday(date) || new Date(`${date}T00:00:00`).getDay() === 2) continue;
+      for (const s of stu) stmts.push({ sql: 'INSERT INTO attendance_logs(student_id, date, class_no, section, status) VALUES (?,?,?,?,?)', params: [s.id, date, s.batch, 'A', rnd() < 0.9 ? 'P' : 'A'] });
+    }
+  }
+  // exams with marks
+  let examId = 0;
+  for (const b of batches) {
+    for (const e of EXAM_PLAN) {
+      const date = `${prevMonth}-${pad2(e.day)}`;
+      examId++;
+      stmts.push({ sql: 'INSERT INTO coaching_exams(id, class_no, name, exam_date, note, full_marks, pass_marks) VALUES (?,?,?,?,?,?,?)', params: [examId, b.no, e.name, date, e.note, e.full, e.pass] });
+      for (const s of stu.filter((x) => x.batch === b.no)) {
+        const absent = rnd() < 0.06;
+        const obtained = absent ? null : Math.min(e.full, Math.max(0, Math.round(e.full * (s.skill + (rnd() - 0.5) * 0.2))));
+        const remark = absent ? null : obtained! >= e.full * 0.8 ? 'Excellent' : obtained! < e.pass ? 'Needs more practice' : null;
+        stmts.push({ sql: 'INSERT INTO coaching_marks(exam_id, student_id, obtained, absent, remark) VALUES (?,?,?,?,?)', params: [examId, s.id, obtained, absent ? 1 : 0, remark] });
+      }
+    }
+  }
+  // teachers with their pay type
+  COACHING_TEACHERS.forEach(([en, bn, des, type, amount], i) => {
+    const sid = i + 1;
+    stmts.push({ sql: 'INSERT INTO staff(id, staff_code, name_en, name_bn, designation, mobile, join_date, monthly_salary, pay_type, pay_rate) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      params: [sid, `ST-${String(sid).padStart(3, '0')}`, en, bn, des, mobile(), `${year - 1}-0${1 + (i % 9)}-01`, type === 'MONTHLY' ? amount : 0, type, type === 'MONTHLY' ? 0 : amount] });
+    const units = type === 'DAILY' ? 18 : type === 'PER_CLASS' ? 22 : null;
+    const regular = units ? units * amount : amount;
+    stmts.push({ sql: 'INSERT INTO salary_ledger(staff_id, slip_no, period, regular_amount, paid_amount, due_after, paid_on, pay_type, units, unit_rate) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      params: [sid, `PS-${prevMonth.replace('-', '')}-${sid}`, prevMonth, regular, regular, 0, `${thisMonth}-01`, type, units, units ? amount : null] });
+  });
+  await db.batch(stmts);
+  return { students: stu.length, staff: COACHING_TEACHERS.length, statements: stmts.length };
 }

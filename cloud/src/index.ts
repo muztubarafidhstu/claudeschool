@@ -431,7 +431,7 @@ admin.get('/settings', async (c) => {
 });
 
 admin.put('/settings', async (c) => {
-  const b = z.record(z.string()).parse(await c.req.json());
+  const b = z.record(z.string(), z.string()).parse(await c.req.json());
   delete b.emergency_pin_hash;
   if ('emergency_pin' in b) {
     if (!/^\d{4,8}$/.test(b.emergency_pin)) return c.json({ error: 'Emergency PIN must be 4–8 digits.' }, 400);

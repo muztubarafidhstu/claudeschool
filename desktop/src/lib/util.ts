@@ -25,7 +25,9 @@ export function makeStudentId(year: number, classNo: number, roll: number) {
 }
 
 export function csvEscape(v: unknown) {
-  const s = v == null ? '' : String(v);
+  let s = v == null ? '' : String(v);
+  // CSV/formula injection: text starting with = + - @ would run as a formula in Excel/Sheets.
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 export const toCsv = (rows: unknown[][]) => '﻿' + rows.map((r) => r.map(csvEscape).join(',')).join('\r\n');

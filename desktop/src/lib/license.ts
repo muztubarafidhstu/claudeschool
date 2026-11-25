@@ -174,8 +174,8 @@ export async function syncOnline(licenseKey?: string): Promise<SyncResult> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ license_key: key, machine_id, app_version: APP_VERSION, student_count: studentCount, local_utc_timestamp: nowUtc() }),
     });
-  } catch {
-    return { ok: false, message: 'Cannot reach the license server. Check your internet connection and try again.' };
+  } catch (e) {
+    return { ok: false, message: `Cannot reach the license server. Check your internet connection and try again. (${String((e as Error)?.message ?? e).slice(0, 160)})` };
   }
   const body = await res.json().catch(() => null);
   if (!body?.status) return { ok: false, message: `License server error (${res.status}).` };

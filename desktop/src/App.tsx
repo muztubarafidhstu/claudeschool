@@ -10,6 +10,8 @@ import Admission from './pages/Admission';
 import Students from './pages/Students';
 import Attendance from './pages/Attendance';
 import Exams from './pages/Exams';
+import CoachingExams from './pages/CoachingExams';
+import { isCoaching } from './lib/groups';
 import Fees from './pages/Fees';
 import Staff from './pages/Staff';
 import Backup from './pages/Backup';
@@ -36,6 +38,10 @@ function Main({ banner }: { banner: Evaluation | null }) {
   // Dynamic UI pruning: if the current page's module gets switched off, fall back to the dashboard.
   useEffect(() => { if (!isPageEnabled(page, settings.modules)) setPageRaw('dashboard'); }, [settings.modules, page]);
   useEffect(() => { void checkForUpdates(); }, []);
+  // The license decides School vs Coaching (switch in the owner panel or by entering another key).
+  const { update } = useApp();
+  const licProduct = banner?.state?.product;
+  useEffect(() => { if (licProduct && licProduct !== settings.product) void update({ product: licProduct }); }, [licProduct]); // eslint-disable-line
 
   // First start of the day: local backup BEFORE the app opens; cloud backups afterwards in the background.
   const [bootBackup, setBootBackup] = useState<'checking' | 'running' | 'done'>('checking');
@@ -75,7 +81,7 @@ function Main({ banner }: { banner: Evaluation | null }) {
       {page === 'admission' && <Admission key={editId ?? 'new'} editId={editId} onDone={() => setPage('students')} />}
       {page === 'students' && <Students onEdit={(id) => { setEditId(id); setPageRaw('admission'); }} />}
       {page === 'attendance' && <Attendance />}
-      {page === 'exams' && <Exams focus={focusStudent} />}
+      {page === 'exams' && (isCoaching(settings) ? <CoachingExams /> : <Exams focus={focusStudent} />)}
       {page === 'fees' && <Fees focus={focusStudent} />}
       {page === 'staff' && <Staff />}
       {page === 'backup' && <Backup />}

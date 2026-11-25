@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { groupLabel, groups, terms } from '../lib/groups';
+import { savePhotoFile } from '../lib/photos';
 import { FileCheck2, Pencil, Send, Printer } from 'lucide-react';
 import { useApp } from '../components/AppContext';
 import { Card, Field } from '../components/ui';
@@ -20,7 +22,10 @@ const blank = (year: number): Form => ({
 
 export default function Admission({ editId, onDone }: { editId: number | null; onDone: () => void }) {
   const { settings, toast, bump, requirePin } = useApp();
-  const [f, setF] = useState<Form>(blank(settings.academicYear));
+  const T = terms(settings);
+  const needsStream = (n: number) => T.streams && n >= 9;
+  const firstGroup = groups(settings)[0]?.no ?? 1;
+  const [f, setF] = useState<Form>(() => ({ ...blank(settings.academicYear), class_no: groups(settings)[0]?.no ?? 1 }));
   const [paid, setPaid] = useState(0);
   const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,8 +59,9 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
   function validate() {
     if (!f.name_en.trim()) return 'Student name (English) is required.';
     if (f.roll < 1 || f.roll > 200) return 'Roll must be between 1 and 200.';
-    if (rollTaken) return `Roll ${f.roll} is already taken in Class ${f.class_no}.`;
-    if (f.class_no >= 9 && !f.stream) return 'Select a Stream (Science / Arts / Commerce) for Class 9–10.';
+    if (rollTaken) return `Roll ${f.roll} is already taken in ${groupLabel(settings, f.class_no)}.`;
+    if (!groups(settings).some((g) => g.no === f.class_no)) return `Select a ${T.group.toLowerCase()}.`;
+    if (needsStream(f.class_no) && !f.stream) return 'Select a Stream (Science / Arts / Commerce) for Class 9–10.';
     if (f.father_mobile && !/^01\d{9}$/.test(f.father_mobile)) return "Father's mobile must be 11 digits starting with 01.";
     if (paid > f.admission_fee) return 'Paid amount cannot exceed the admission fee.';
     return null;
@@ -65,7 +71,7 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
   async function submit(): Promise<boolean> {
     setBusy(true);
     try {
-      const vals = { ...f, student_id: studentId, section: settings.modules.sections ? f.section || 'A' : 'A', stream: f.class_no >= 9 ? f.stream : null };
+      const vals = { ...f, student_id: studentId, section: settings.modules.sections ? f.section || 'A' : 'A', stream: needsStream(f.class_no) ? f.stream : null };
       if (editing) {
         await db.execute(`UPDATE students SET class_no=?, section=?, stream=?, roll=?, name_en=?, name_bn=?, gender=?, dob=?, blood_group=?, birth_cert_no=?,
           father_name=?, father_mobile=?, mother_name=?, mother_mobile=?, address=?, monthly_fee=?, admission_fee=?, photo=?, updated_at=datetime('now') WHERE id=?`,
@@ -85,6 +91,8 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
         }
         toast(`Admission confirmed — Student ID ${studentId}`);
       }
+      const photoErr = await savePhotoFile(settings, studentId, vals.name_en, vals.photo);
+      if (photoErr) toast(`Saved, but the photo file could not be written: ${photoErr}`, 'err');
       bump();
       return true;
     } catch (e: any) {
@@ -118,14 +126,14 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold">{editing ? 'Edit Student Record' : 'New Student Admission'}</h1><p className="text-sm text-slate-500">Auto Student ID format YYCCRR (year · class · roll)</p></div>
+        <div><h1 className="text-2xl font-bold">{editing ? 'Edit Student Record' : 'New Student Admission'}</h1><p className="text-sm text-slate-500">Auto Student ID format YYCCRR (year · {T.group.toLowerCase()} · roll)</p></div>
         <div className="rounded-xl bg-navy px-5 py-3 text-right text-white"><div className="text-[10px] uppercase tracking-wider text-slate-400">Student ID</div><div className="font-mono text-2xl font-bold tracking-widest text-brand">{studentId}</div></div>
       </div>
 
-      <Card title="Academic placement">
+      <Card title={T.group === 'Batch' ? 'Batch & roll' : 'Academic placement'}>
         <div className="grid gap-4 p-4 md:grid-cols-4">
-          <ClassPicker classNo={f.class_no} section={f.section} stream={f.class_no >= 9 ? (f.stream ?? 'Science') : null} allowAllSections={false} requireStream
-            onChange={(v) => setF((p) => ({ ...p, class_no: v.classNo || 1, section: v.section || 'A', stream: v.classNo >= 9 ? (v.stream || 'Science') : null }))} />
+          <ClassPicker classNo={f.class_no} section={f.section} stream={needsStream(f.class_no) ? (f.stream ?? 'Science') : null} allowAllSections={false} requireStream
+            onChange={(v) => setF((p) => ({ ...p, class_no: v.classNo || firstGroup, section: v.section || 'A', stream: needsStream(v.classNo) ? (v.stream || 'Science') : null }))} />
           <Field label="Roll Number" hint={rollTaken ? '⚠ already taken' : 'Unique within the class (1–200)'}>
             <input type="number" min={1} max={200} className={`input ${rollTaken ? 'border-bad' : ''}`} value={f.roll} onChange={(e) => set('roll', Number(e.target.value))} />
           </Field>

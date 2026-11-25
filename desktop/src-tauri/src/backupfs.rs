@@ -78,6 +78,24 @@ pub fn prune(dir: &str, keep: usize) -> Result<usize, String> {
     Ok(removed)
 }
 
+/// Saves a photo (data URL from the app) as a JPEG/PNG file, e.g. "260512_Sadia_Rahman.jpg".
+pub fn write_photo(dir: &str, name: &str, data_url: &str) -> Result<String, String> {
+    use base64::Engine;
+    let ok_name = !name.is_empty()
+        && name.len() <= 120
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        && !name.contains("..")
+        && (name.ends_with(".jpg") || name.ends_with(".png"));
+    if !ok_name {
+        return Err("Invalid photo file name".into());
+    }
+    let b64 = data_url.split_once(";base64,").map(|x| x.1).ok_or("Photo is not a data URL")?;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
+    let target = folder(dir)?.join(name);
+    fs::write(&target, bytes).map_err(|e| format!("Could not save photo: {e}"))?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

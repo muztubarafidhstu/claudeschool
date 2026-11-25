@@ -39,15 +39,15 @@ export default function Layout({ page, setPage, banner, children }: { page: Page
 
   return (
     <div className="flex h-full">
-      <aside className="flex w-64 shrink-0 flex-col bg-navy text-white">
+      <aside className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-[#0F172A] via-[#0F172A] to-[#0B2530] text-white">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand"><GraduationCap size={20} /></div>
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-400 to-brand shadow-lg shadow-brand/40"><GraduationCap size={22} /></div>
           <div className="leading-tight"><div className="font-bold">ScholarDesk <span className="text-brand">Pro</span></div><div className="max-w-[150px] truncate text-[11px] text-slate-400">{settings.school.name || 'School Management'}</div>
             <span className={`mt-0.5 inline-block rounded px-1.5 text-[10px] font-bold uppercase tracking-wide ${banner?.state?.product === 'COACHING' ? 'bg-violet-500/20 text-violet-300' : 'bg-brand/20 text-teal-300'}`}>{banner?.state?.product === 'COACHING' ? 'Coaching' : 'School'}</span></div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
           {items.map(({ page: p, key, icon: Icon }) => (
-            <button key={p} onClick={() => setPage(p)} className={clsx('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition', page === p ? 'bg-brand font-semibold text-white shadow' : 'text-slate-300 hover:bg-white/5 hover:text-white', settings.lang === 'bn' && 'bn')}>
+            <button key={p} onClick={() => setPage(p)} className={clsx('relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition', page === p ? 'bg-gradient-to-r from-brand to-teal-500/80 font-semibold text-white shadow-lg shadow-brand/20' : 'text-slate-300 hover:bg-white/[0.06] hover:text-white', settings.lang === 'bn' && 'bn')}>
               <Icon size={18} /> {t(key)}
             </button>
           ))}
@@ -55,7 +55,7 @@ export default function Layout({ page, setPage, banner, children }: { page: Page
         <div className="border-t border-white/10 px-5 py-3 text-[11px] text-slate-500">v1.0.0 · Academic Year {settings.academicYear}</div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-line bg-white px-6 py-3">
+        <header className="flex items-center gap-3 border-b border-line bg-white/90 px-6 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur">
           <button onClick={() => setOmni(true)} className="flex w-full max-w-lg items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-slate-400 hover:border-brand">
             <Search size={16} /> <span className={settings.lang === 'bn' ? 'bn' : ''}>{t('search')}</span>
             <kbd className="ml-auto rounded border border-line bg-white px-1.5 text-[10px] font-semibold text-slate-500">Ctrl K</kbd>

@@ -49,10 +49,14 @@ export function Modal({ open, onClose, title, children, width = 'max-w-3xl', foo
 }
 
 export function Kpi({ label, value, icon, tone = 'brand', sub }: { label: string; value: ReactNode; icon: ReactNode; tone?: 'brand' | 'ok' | 'bad' | 'due' | 'slate'; sub?: ReactNode }) {
-  const tones = { brand: 'bg-brand-soft text-brand-dark', ok: 'bg-emerald-50 text-ok', bad: 'bg-red-50 text-bad', due: 'bg-amber-50 text-due', slate: 'bg-slate-100 text-slate-600' };
+  const tones = {
+    brand: 'from-teal-400 to-brand text-white shadow-brand/30', ok: 'from-emerald-400 to-emerald-600 text-white shadow-emerald-500/30',
+    bad: 'from-rose-400 to-rose-600 text-white shadow-rose-500/30', due: 'from-amber-300 to-amber-500 text-white shadow-amber-500/30',
+    slate: 'from-slate-500 to-slate-700 text-white shadow-slate-500/30',
+  };
   return (
-    <div className="card flex items-center gap-4 p-4">
-      <div className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-lg', tones[tone])}>{icon}</div>
+    <div className="card flex items-center gap-4 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className={clsx('grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br shadow-lg', tones[tone])}>{icon}</div>
       <div className="min-w-0">
         <div className="truncate text-xs font-medium text-slate-500">{label}</div>
         <div className="text-xl font-bold text-slate-900">{value}</div>
