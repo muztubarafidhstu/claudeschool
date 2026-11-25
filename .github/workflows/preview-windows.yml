@@ -1,0 +1,34 @@
+# Builds an UNSIGNED Windows installer for previewing (license checks disabled via VITE_PREVIEW_BUILD=1).
+# Download it from the run's "Artifacts" section. For real customer releases use release-desktop.yml.
+name: Preview Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, scholardesk-pro-v1]
+    paths: ['desktop/**', '.github/workflows/preview-windows.yml']
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: 'desktop/src-tauri -> target' }
+      - run: npm ci
+      - name: Build installer
+        env:
+          VITE_PREVIEW_BUILD: '1'
+        run: npx tauri build --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScholarDesk-Pro-Preview-Windows
+          path: |
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error

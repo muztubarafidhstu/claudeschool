@@ -7,7 +7,25 @@ const HEARTBEAT_MS = 15 * 60_000;  // online heartbeat (owner's ON/OFF switch ta
 const EVAL_MS = 60_000;            // offline re-evaluation (clock / grace expiry)
 
 /** Wraps the whole app. Nothing inside renders unless the license evaluates as unlocked. */
-export default function LicenseGate({ children, onBanner }: { children: ReactNode; onBanner: (b: Evaluation | null) => void }) {
+/**
+ * PREVIEW builds (VITE_PREVIEW_BUILD=1, set only by the preview CI workflow) skip licensing so the
+ * installer can be tried before the license server is deployed. Production builds never set it.
+ */
+export const PREVIEW_BUILD = import.meta.env.VITE_PREVIEW_BUILD === '1';
+
+export default function LicenseGate(props: { children: ReactNode; onBanner: (b: Evaluation | null) => void }) {
+  if (PREVIEW_BUILD) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="bg-due px-4 py-1 text-center text-xs font-semibold text-white">PREVIEW BUILD — license checks disabled. Not for sale.</div>
+        <div className="min-h-0 flex-1">{props.children}</div>
+      </div>
+    );
+  }
+  return <LicensedGate {...props} />;
+}
+
+function LicensedGate({ children, onBanner }: { children: ReactNode; onBanner: (b: Evaluation | null) => void }) {
   const [ev, setEv] = useState<Evaluation | null>(null);
   const refresh = useCallback(async () => { const e = await evaluate(); setEv(e); onBanner(e); return e; }, [onBanner]);
 
