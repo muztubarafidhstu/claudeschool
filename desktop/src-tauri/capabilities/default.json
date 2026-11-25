@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "ScholarDesk Pro main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "opener:allow-open-url",
+    "dialog:default",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "process:allow-restart",
+    "updater:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.yourdomain.com/*" },
+        { "url": "http://localhost:8080/*" },
+        { "url": "https://oauth2.googleapis.com/*" },
+        { "url": "https://www.googleapis.com/*" }
+      ]
+    }
+  ]
+}

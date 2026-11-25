@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+out/
+target/
+.env
+.env.local
+*.log
+server/keys/*.pem
+!server/keys/.gitkeep
+desktop/src-tauri/gen/
