@@ -1,0 +1,57 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/noto-sans-bengali/400.css';
+@import '@fontsource/noto-sans-bengali/600.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { background: #F8FAFC; color: #0F172A; -webkit-font-smoothing: antialiased; }
+.bn { font-family: 'Noto Sans Bengali', Inter, sans-serif; }
+
+@layer components {
+  .card { @apply rounded-xl border border-line bg-white; }
+  .btn { @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-brand text-white shadow-sm hover:bg-brand-dark; }
+  .btn-ghost { @apply btn border border-line bg-white text-slate-700 hover:bg-slate-50; }
+  .btn-danger { @apply btn bg-bad text-white hover:bg-red-600; }
+  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+  .input { @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand-soft disabled:bg-slate-50; }
+  .label { @apply mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500; }
+  .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold; }
+  .table { @apply w-full text-sm; }
+  .table th { @apply bg-slate-50 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500; }
+  .table td { @apply border-t border-slate-100 px-3 py-2.5; }
+  .tab { @apply rounded-lg px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100; }
+  .tab-active { @apply bg-brand text-white hover:bg-brand; }
+}
+
+/* ---------- A4 print system ---------- */
+#print-portal { display: none; }
+#print-portal.open { display: block; position: fixed; inset: 0; z-index: 100; overflow: auto; background: rgba(15, 23, 42, .75); }
+.a4 { width: 210mm; min-height: 297mm; padding: 14mm 14mm 12mm; margin: 0 auto 10mm; background: #fff; color: #0F172A; box-shadow: 0 10px 40px rgba(0,0,0,.35); position: relative; font-size: 12px; }
+.a4-landscape { width: 297mm; min-height: 210mm; padding: 10mm; }
+.a4 table.doc { width: 100%; border-collapse: collapse; }
+.a4 table.doc th, .a4 table.doc td { border: 1px solid #CBD5E1; padding: 5px 7px; text-align: left; }
+.a4 table.doc th { background: #F1F5F9; font-weight: 600; }
+.a4 .sig { border-top: 1px dashed #475569; padding-top: 4px; text-align: center; font-size: 11px; min-width: 42mm; }
+.cell-p { background: #10B981 !important; color: #fff !important; font-weight: 700; text-align: center !important; }
+.cell-a { background: #EF4444 !important; color: #fff !important; font-weight: 700; text-align: center !important; }
+.cell-f { background: #E2E8F0 !important; color: #64748B !important; text-align: center !important; }
+
+@page { size: A4 portrait; margin: 0; }
+@page landscape { size: A4 landscape; margin: 0; }
+.a4-landscape { page: landscape; }
+
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  html, body { background: #fff !important; height: auto; }
+  #root { display: none !important; }
+  #print-portal, #print-portal.open { display: block !important; position: static !important; overflow: visible !important; background: #fff !important; }
+  .no-print { display: none !important; }
+  .a4 { box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
+  .a4:last-child { break-after: auto; page-break-after: auto; }
+}

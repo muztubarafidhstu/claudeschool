@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ScholarDesk Pro",
+  "version": "1.0.0",
+  "identifier": "com.yourdomain.scholardesk",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ScholarDesk Pro",
+        "width": 1366,
+        "height": 820,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost https://api.yourdomain.com https://oauth2.googleapis.com https://www.googleapis.com"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "dmg", "app"],
+    "createUpdaterArtifacts": true,
+    "publisher": "ScholarDesk",
+    "category": "Education",
+    "shortDescription": "School management for private schools (Class 1–10)",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper" },
+      "nsis": { "installMode": "perMachine", "languages": ["English"] }
+    },
+    "macOS": { "minimumSystemVersion": "11.0", "infoPlist": "Info.plist" }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_OUTPUT_OF__npx_tauri_signer_generate",
+      "endpoints": ["https://api.yourdomain.com/api/v1/updates/{{target}}/{{arch}}/{{current_version}}"],
+      "windows": { "installMode": "passive" }
+    }
+  }
+}
