@@ -8,7 +8,7 @@ import { cors } from 'hono/cors';
 import { z, ZodError } from 'zod';
 import {
   type Env, addPeriod, all, audit, bump, generateLicenseKey, isoNow, nowSec, one, peek, publicKeyPem, run,
-  signAdmin, signGraceToken, todayUtc, uuid, verifyAdmin, verifyPassword,
+  signAdmin, signGraceToken, todayUtc, uuid, verifyAdmin, verifyPassword, emergencyCode, normLockId,
 } from './lib';
 
 type C = Context<{ Bindings: Env }>;
@@ -424,6 +424,20 @@ admin.put('/settings', async (c) => {
   }
   await audit(c.env.DB, 'UPDATE_SETTINGS', 'settings', '-', Object.keys(b));
   return c.json({ ok: true });
+});
+
+/** 5-day emergency unlock code for one PC and one lock (the app accepts each Lock ID only once). */
+admin.post('/emergency-code', async (c) => {
+  const secret = c.env.EMERGENCY_SECRET;
+  if (!secret || secret.length < 16) return c.json({ error: 'Emergency codes are not set up on the server (EMERGENCY_SECRET).' }, 501);
+  const b = z.object({ machine_id: z.string().trim().min(6).max(80), lock_id: z.string() }).parse(await c.req.json());
+  const lockId = normLockId(b.lock_id);
+  if (!lockId) return c.json({ error: 'Lock ID must have 8 digits, like 1234-5678.' }, 400);
+  const machine = b.machine_id.toUpperCase();
+  const code = await emergencyCode(secret, machine, lockId);
+  const lic = await one<any>(c.env.DB, 'SELECT l.id, s.name FROM licenses l JOIN schools s ON s.id = l.school_id WHERE l.machine_id = ?', machine);
+  await audit(c.env.DB, 'EMERGENCY_CODE', 'machine', machine, { lock_id: lockId, license: lic?.id ?? null });
+  return c.json({ code, lock_id: lockId, machine_id: machine, school_name: lic?.name ?? null, days: 5 });
 });
 
 /** One-click backup of the whole license database (JSON). */

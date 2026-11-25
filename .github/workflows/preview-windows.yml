@@ -31,6 +31,9 @@ jobs:
         env:
           VITE_PREVIEW_BUILD: ${{ inputs.mode == 'licensed' && '0' || '1' }}
           VITE_LICENSE_API: https://school.rafid0.com/api/v1
+          SD_EMERGENCY_SECRET: ${{ secrets.SD_EMERGENCY_SECRET }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
         run: npx tauri build --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":false}}'
         shell: bash
       - uses: actions/upload-artifact@v4

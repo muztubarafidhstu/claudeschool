@@ -8,6 +8,7 @@ export interface Env {
   ADMIN_JWT_SECRET?: string;
   LICENSE_PRIVATE_KEY: string;
   LICENSE_PUBLIC_KEY: string;
+  EMERGENCY_SECRET?: string;
 }
 
 export const nowSec = () => Math.floor(Date.now() / 1000);
@@ -108,3 +109,12 @@ export async function peek(db: D1Database, key: string, windowSec: number) {
 
 export const audit = (db: D1Database, action: string, entity: string, id: string, detail: unknown = {}) =>
   run(db, 'INSERT INTO admin_audit(action, entity, entity_id, detail) VALUES (?,?,?,?)', action, entity, id, JSON.stringify(detail));
+
+// ---------- emergency unlock codes (must match desktop/src-tauri/src/emergency.rs) ----------
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+export const normLockId = (s: string) => { const d = s.replace(/\D/g, ''); return d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4)}` : null; };
+export async function emergencyCode(secret: string, machineId: string, lockId: string) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${machineId}:${lockId}`)));
+  return Array.from(mac.slice(0, 8), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}

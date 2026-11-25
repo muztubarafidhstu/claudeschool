@@ -33,7 +33,8 @@ export default function Layout({ page, setPage, banner, children }: { page: Page
     return () => window.removeEventListener('keydown', h);
   }, []);
   const items = NAV.filter((n) => !n.module || settings.modules[n.module]);
-  const warnOffline = banner && !banner.locked && (banner.daysLeftOffline ?? 7) <= 3;
+  const emergency = banner?.emergency;
+  const warnOffline = banner && !banner.locked && !emergency && (banner.daysLeftOffline ?? 7) <= 3;
   const warnExpiry = banner && !banner.locked && banner.daysToExpiry !== undefined && banner.daysToExpiry <= 7;
 
   return (
@@ -41,7 +42,8 @@ export default function Layout({ page, setPage, banner, children }: { page: Page
       <aside className="flex w-64 shrink-0 flex-col bg-navy text-white">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand"><GraduationCap size={20} /></div>
-          <div className="leading-tight"><div className="font-bold">ScholarDesk <span className="text-brand">Pro</span></div><div className="max-w-[150px] truncate text-[11px] text-slate-400">{settings.school.name || 'School Management'}</div></div>
+          <div className="leading-tight"><div className="font-bold">ScholarDesk <span className="text-brand">Pro</span></div><div className="max-w-[150px] truncate text-[11px] text-slate-400">{settings.school.name || 'School Management'}</div>
+            <span className={`mt-0.5 inline-block rounded px-1.5 text-[10px] font-bold uppercase tracking-wide ${banner?.state?.product === 'COACHING' ? 'bg-violet-500/20 text-violet-300' : 'bg-brand/20 text-teal-300'}`}>{banner?.state?.product === 'COACHING' ? 'Coaching' : 'School'}</span></div>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
           {items.map(({ page: p, key, icon: Icon }) => (
@@ -61,7 +63,12 @@ export default function Layout({ page, setPage, banner, children }: { page: Page
           <div className="flex-1" />
           <button className="btn-ghost btn-sm" onClick={() => update({ lang: settings.lang === 'en' ? 'bn' : 'en' })}><Languages size={14} /> {settings.lang === 'en' ? 'বাংলা' : 'English'}</button>
         </header>
-        {(warnOffline || warnExpiry) && (
+        {emergency && (
+          <div className="flex items-center gap-2 bg-bad px-6 py-2 text-sm font-semibold text-white">
+            <AlertTriangle size={16} /> Emergency access: {emergency.daysLeft} day(s) left. Please pay and verify the subscription online before it locks again.
+          </div>
+        )}
+        {!emergency && (warnOffline || warnExpiry) && (
           <div className="flex items-center gap-2 bg-amber-50 px-6 py-2 text-sm text-amber-800">
             {warnOffline ? <WifiOff size={16} /> : <AlertTriangle size={16} />}
             {warnOffline ? `Connect to the internet soon — offline grace ends in ${banner!.daysLeftOffline} day(s).` : `Subscription ends in ${banner!.daysToExpiry} day(s) (${banner!.state?.valid_until}). Please renew to avoid interruption.`}

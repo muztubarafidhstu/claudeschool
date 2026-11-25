@@ -1,4 +1,6 @@
+mod backupfs;
 mod db;
+mod emergency;
 mod license;
 mod oauth;
 
@@ -37,6 +39,36 @@ fn verify_grace_token(token: String) -> CmdResult<license::GraceClaims> {
 }
 
 #[tauri::command]
+fn emergency_available() -> bool {
+    emergency::enabled()
+}
+
+#[tauri::command]
+fn verify_emergency_code(lock_id: String, code: String) -> bool {
+    emergency::verify(&license::machine_id(), &lock_id, &code)
+}
+
+#[tauri::command]
+fn backup_write(dir: String, name: String, content: String) -> CmdResult<String> {
+    backupfs::write(&dir, &name, &content)
+}
+
+#[tauri::command]
+fn backup_list(dir: String) -> CmdResult<Vec<backupfs::BackupFile>> {
+    backupfs::list(&dir)
+}
+
+#[tauri::command]
+fn backup_read(dir: String, name: String) -> CmdResult<String> {
+    backupfs::read(&dir, &name)
+}
+
+#[tauri::command]
+fn backup_prune(dir: String, keep: usize) -> CmdResult<usize> {
+    backupfs::prune(&dir, keep)
+}
+
+#[tauri::command]
 fn start_oauth_listener(app: tauri::AppHandle) -> CmdResult<u16> {
     oauth::start(app)
 }
@@ -68,6 +100,12 @@ pub fn run() {
             db_batch,
             machine_id,
             verify_grace_token,
+            emergency_available,
+            verify_emergency_code,
+            backup_write,
+            backup_list,
+            backup_read,
+            backup_prune,
             start_oauth_listener
         ])
         .run(tauri::generate_context!())

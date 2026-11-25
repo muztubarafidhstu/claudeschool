@@ -3,6 +3,7 @@
 #   CLOUDFLARE_API_TOKEN     Cloudflare token (Edit Cloudflare Workers + D1 Edit + DNS Edit)
 #   SD_LICENSE_PRIVATE_KEY   full contents of license_private.pem
 #   SD_ADMIN_PASSWORD_HASH   pbkdf2$… line (cloud/scripts/hash-password.mjs)
+#   SD_EMERGENCY_SECRET      random text, same value used when building the Windows installer (emergency codes)
 #   CLOUDFLARE_ACCOUNT_ID    optional (only if the token can see more than one account)
 name: Deploy to Cloudflare
 on:
@@ -77,7 +78,9 @@ jobs:
         env:
           PK: ${{ secrets.SD_LICENSE_PRIVATE_KEY }}
           PH: ${{ secrets.SD_ADMIN_PASSWORD_HASH }}
+          ES: ${{ secrets.SD_EMERGENCY_SECRET }}
         run: |
+          if [ -n "$ES" ]; then printf '%s' "$ES" | npx wrangler secret put EMERGENCY_SECRET; else echo "::warning::SD_EMERGENCY_SECRET not set — emergency codes disabled"; fi
           printf '%s' "$PK" | npx wrangler secret put LICENSE_PRIVATE_KEY
           printf '%s' "$PH" | npx wrangler secret put ADMIN_PASSWORD_HASH
           cat ../desktop/src-tauri/keys/license_public.pem | npx wrangler secret put LICENSE_PUBLIC_KEY

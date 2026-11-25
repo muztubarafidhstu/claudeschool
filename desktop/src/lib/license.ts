@@ -15,8 +15,8 @@ import publicKeyPem from '../../src-tauri/keys/license_public.pem?raw';
 
 export const LICENSE_API = import.meta.env.VITE_LICENSE_API ?? 'https://school.rafid0.com/api/v1';
 export const APP_VERSION = '1.0.0';
-/** This desktop build's product. The coaching app sends 'COACHING'. */
-export const PRODUCT: 'SCHOOL' | 'COACHING' = 'SCHOOL';
+/** One installer for both products; the server decides SCHOOL / COACHING from the license key. */
+export const PRODUCT_NAME = { SCHOOL: 'ScholarDesk Pro — School', COACHING: 'ScholarDesk Pro — Coaching' } as const;
 export const GRACE_SECONDS = 7 * 86400;
 const CLOCK_TOLERANCE = 10 * 60; // 10 minutes of normal drift allowed
 
@@ -32,6 +32,8 @@ export interface LicenseState {
   last_online_sync: number;
   payment_notice: string;
   payment_instructions: string;
+  /** Decided by the server from the license key: SCHOOL or COACHING. */
+  product?: 'SCHOOL' | 'COACHING';
 }
 export type LockReason = 'NEEDS_ACTIVATION' | 'PENDING' | 'CLOCK_TAMPER' | 'OFFLINE_TOO_LONG' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH';
 export interface Evaluation {
@@ -40,6 +42,63 @@ export interface Evaluation {
   state: LicenseState | null;
   daysLeftOffline?: number;
   daysToExpiry?: number;
+  /** Set when the app runs on a 5-day emergency code although the license is locked. */
+  emergency?: { daysLeft: number; until: number; reason: LockReason };
+}
+
+// ---------------------------------------------------------------- emergency unlock (5 days, once per lock)
+export const EMERGENCY_DAYS = 5;
+interface EmergencyGrant { lock_id: string; granted_at: number; until: number; last_seen: number }
+
+/**
+ * Lock ID shown on the lock screen. It only changes after a successful online verification
+ * (last_online_sync), so each lock period allows exactly one emergency code.
+ */
+export async function currentLockId(st: LicenseState | null): Promise<string> {
+  const mid = st?.machine_id || (await getMachineId());
+  const raw = `${mid}:${st?.license_key ?? 'none'}:${st?.last_online_sync ?? 0}`;
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw)));
+  const n = ((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]) >>> 0;
+  const digits = String(n % 100000000).padStart(8, '0');
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+}
+
+// Development-only fallback so the browser preview can exercise the screens (never set in real builds).
+const DEV_SECRET = import.meta.env.DEV ? (import.meta.env.VITE_DEV_EMERGENCY_SECRET as string | undefined) : undefined;
+async function devCode(mid: string, lockId: string) {
+  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(DEV_SECRET!), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const m = new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(`${mid}:${lockId}`)));
+  return Array.from(m.slice(0, 8), (b) => A[b % A.length]).join('');
+}
+
+export async function emergencyAvailable() {
+  if (isTauri) return invoke<boolean>('emergency_available').catch(() => false);
+  return !!DEV_SECRET;
+}
+
+export async function applyEmergencyCode(code: string): Promise<{ ok: boolean; message: string }> {
+  const st = await loadLicense();
+  const lockId = await currentLockId(st);
+  const prev = await getConfig<EmergencyGrant | null>('emergency', null);
+  if (prev?.lock_id === lockId) return { ok: false, message: 'An emergency code was already used for this lock. Please pay and activate the subscription online.' };
+  const valid = isTauri
+    ? await invoke<boolean>('verify_emergency_code', { lockId, code }).catch(() => false)
+    : !!DEV_SECRET && (await devCode(await getMachineId(), lockId)) === code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!valid) return { ok: false, message: 'This code is not correct for this PC and Lock ID.' };
+  const now = nowUtc();
+  await setConfig('emergency', { lock_id: lockId, granted_at: now, until: now + EMERGENCY_DAYS * 86400, last_seen: now } satisfies EmergencyGrant);
+  return { ok: true, message: `Unlocked for ${EMERGENCY_DAYS} days.` };
+}
+
+async function emergencyOverride(locked: Evaluation): Promise<Evaluation> {
+  const g = await getConfig<EmergencyGrant | null>('emergency', null);
+  if (!g) return locked;
+  const now = nowUtc();
+  if (g.lock_id !== (await currentLockId(locked.state))) return locked;
+  if (now + CLOCK_TOLERANCE < g.last_seen || now > g.until) return locked; // expired or clock rolled back
+  if (now > g.last_seen) await setConfig('emergency', { ...g, last_seen: now });
+  return { locked: false, state: locked.state, emergency: { daysLeft: Math.max(1, Math.ceil((g.until - now) / 86400)), until: g.until, reason: locked.reason! } };
 }
 
 interface Claims { sub: string; mid: string; vu: string; iat: number; exp: number; name: string }
@@ -62,6 +121,11 @@ export const loadLicense = () => getConfig<LicenseState | null>('license', null)
 const saveLicense = (s: LicenseState) => setConfig('license', s);
 
 export async function evaluate(): Promise<Evaluation> {
+  const e = await evaluateLicense();
+  return e.locked ? emergencyOverride(e) : e;
+}
+
+async function evaluateLicense(): Promise<Evaluation> {
   const st = await loadLicense();
   if (!st?.license_key) return { locked: true, reason: 'NEEDS_ACTIVATION', state: st };
   const now = nowUtc();
@@ -119,6 +183,7 @@ export async function syncOnline(licenseKey?: string): Promise<SyncResult> {
     last_online_sync: body.status === 'ACTIVE' ? serverNow : (prev?.last_online_sync ?? 0),
     payment_notice: body.payment_notice ?? '',
     payment_instructions: body.payment_instructions ?? '',
+    product: body.product ?? prev?.product ?? 'SCHOOL',
   };
   if (body.status === 'ACTIVE' && !(await verifyToken(body.grace_token_jwt))) {
     return { ok: false, message: 'The server response could not be verified (signature mismatch). Contact support.' };
@@ -139,6 +204,7 @@ export const LOCK_TEXT: Record<LockReason, { title: string; body: string }> = {
 };
 
 export interface RegistrationForm {
+  product: 'SCHOOL' | 'COACHING';
   school_name: string; school_name_bn?: string; contact_person: string; phone: string; email?: string;
   address?: string; district?: string; students_estimate?: number | null; requested_plan: 'TRIAL' | 'MONTHLY' | 'YEARLY';
 }
@@ -150,7 +216,7 @@ export async function requestActivation(form: RegistrationForm): Promise<SyncRes
   try {
     res = await httpFetch(`${LICENSE_API}/register`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...form, product: PRODUCT, machine_id, app_version: APP_VERSION }),
+      body: JSON.stringify({ ...form, machine_id, app_version: APP_VERSION }),
     });
   } catch {
     return { ok: false, message: 'Cannot reach the server. Check the internet connection and try again.' };

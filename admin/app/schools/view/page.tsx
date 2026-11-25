@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Power, PowerOff, RotateCcw, KeyRound, Trash2 } from 'lucide-react';
 import { api, effectiveStatus, fmtBdt, fmtDate, ProductTag, type SchoolRow } from '@/lib/api';
 import StatusBadge from '@/components/StatusBadge';
+import EmergencyCode from '@/components/EmergencyCode';
 
 function Inner() {
   const id = useSearchParams().get('id') ?? '';
@@ -70,6 +71,8 @@ function Inner() {
           <button className="btn-primary">Save license</button>
         </form>
       </div>
+
+      {s.machine_id && <EmergencyCode machineId={s.machine_id} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="card overflow-x-auto">

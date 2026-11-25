@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "ScholarDesk Pro main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -15,10 +17,21 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://school.rafid0.com/*" },
-        { "url": "http://localhost:8080/*" },
-        { "url": "https://oauth2.googleapis.com/*" },
-        { "url": "https://www.googleapis.com/*" }
+        {
+          "url": "https://school.rafid0.com/*"
+        },
+        {
+          "url": "http://localhost:8080/*"
+        },
+        {
+          "url": "https://oauth2.googleapis.com/*"
+        },
+        {
+          "url": "https://www.googleapis.com/*"
+        },
+        {
+          "url": "https://api.telegram.org/*"
+        }
       ]
     }
   ]

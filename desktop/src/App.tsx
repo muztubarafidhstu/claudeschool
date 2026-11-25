@@ -15,6 +15,8 @@ import Backup from './pages/Backup';
 import SettingsPage from './pages/Settings';
 import type { Evaluation } from './lib/license';
 import { checkForUpdates } from './lib/updater';
+import { dailyCloudIfNeeded, dailyLocalIfNeeded } from './lib/autobackup';
+import { DatabaseBackup } from 'lucide-react';
 
 function Main({ banner }: { banner: Evaluation | null }) {
   const { settings, setSettingsUnlocked, setNavigator } = useApp();
@@ -34,7 +36,38 @@ function Main({ banner }: { banner: Evaluation | null }) {
   useEffect(() => { if (!isPageEnabled(page, settings.modules)) setPageRaw('dashboard'); }, [settings.modules, page]);
   useEffect(() => { void checkForUpdates(); }, []);
 
+  // First start of the day: local backup BEFORE the app opens; cloud backups afterwards in the background.
+  const [bootBackup, setBootBackup] = useState<'checking' | 'running' | 'done'>('checking');
+  const { toast } = useApp();
+  useEffect(() => {
+    if (!settings.onboarded) { setBootBackup('done'); return; }
+    let alive = true;
+    const t = setTimeout(() => alive && setBootBackup((b) => (b === 'checking' ? 'running' : b)), 300);
+    dailyLocalIfNeeded(settings).then((r) => {
+      clearTimeout(t);
+      if (!alive) return;
+      if (r !== 'done' && r !== 'skipped') toast(`Daily backup failed: ${r}`, 'err');
+      setBootBackup('done');
+    });
+    const cloud = () => void dailyCloudIfNeeded(settings).catch(() => null);
+    const c1 = setTimeout(cloud, 20_000);
+    const c2 = setInterval(cloud, 60 * 60_000);
+    return () => { alive = false; clearTimeout(t); clearTimeout(c1); clearInterval(c2); };
+  }, [settings.onboarded]); // eslint-disable-line
+
   if (!settings.onboarded) return <Onboarding />;
+  if (bootBackup !== 'done') {
+    return (
+      <div className="grid h-full place-items-center bg-canvas">
+        {bootBackup === 'running' && (
+          <div className="card flex items-center gap-4 px-8 py-6">
+            <DatabaseBackup className="animate-pulse text-brand" size={32} />
+            <div><div className="font-semibold">Making today’s backup…</div><div className="text-sm text-slate-500">This happens once a day and takes a few seconds.</div></div>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <Layout page={page} setPage={setPage} banner={banner}>
       {page === 'dashboard' && <Dashboard go={setPage} />}

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, School, Receipt, Settings, LogOut, GraduationCap, Menu, BellRing } from 'lucide-react';
+import { LayoutDashboard, School, Receipt, Settings, LogOut, GraduationCap, Menu, BellRing, LifeBuoy } from 'lucide-react';
 import { api, getToken, setToken } from '@/lib/api';
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { href: '/pending/', label: 'Pending requests', icon: BellRing },
   { href: '/schools/', label: 'Schools & Licenses', icon: School },
   { href: '/payments/', label: 'Payments', icon: Receipt },
+  { href: '/emergency/', label: 'Emergency code', icon: LifeBuoy },
   { href: '/settings/', label: 'Settings', icon: Settings },
 ];
 

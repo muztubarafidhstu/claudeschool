@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { GraduationCap, KeyRound, Lock, RefreshCw, Wifi, Cpu, ShieldAlert, Send, Hourglass, School } from 'lucide-react';
-import { evaluate, requestActivation, syncOnline, LOCK_TEXT, type Evaluation, type RegistrationForm } from '../lib/license';
+import { GraduationCap, KeyRound, Lock, RefreshCw, Wifi, Cpu, ShieldAlert, Send, Hourglass, School, LifeBuoy } from 'lucide-react';
+import { applyEmergencyCode, currentLockId, emergencyAvailable, evaluate, requestActivation, syncOnline, EMERGENCY_DAYS, LOCK_TEXT, type Evaluation, type RegistrationForm } from '../lib/license';
 import { getConfig } from '../lib/config';
 import { getMachineId } from '../lib/platform';
 
@@ -48,6 +48,42 @@ function LicensedGate({ children, onBanner }: { children: ReactNode; onBanner: (
   return <LockScreen ev={ev} onRetry={refresh} />;
 }
 
+/** Lock ID + emergency code entry (owner generates the code in the web panel). */
+function EmergencyBox({ ev, onDone }: { ev: Evaluation | null; onDone: () => Promise<Evaluation> }) {
+  const [avail, setAvail] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [lockId, setLockId] = useState('');
+  const [mid, setMid] = useState('');
+  const [code, setCode] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => { emergencyAvailable().then(setAvail); currentLockId(ev?.state ?? null).then(setLockId); getMachineId().then(setMid); }, [ev]);
+  if (!avail) return null;
+  async function apply(e: React.FormEvent) {
+    e.preventDefault();
+    const r = await applyEmergencyCode(code);
+    setMsg({ ok: r.ok, text: r.message });
+    if (r.ok) setTimeout(() => void onDone(), 700);
+  }
+  return (
+    <div className="rounded-lg border border-dashed border-slate-300 p-4">
+      {!open ? (
+        <button className="flex w-full items-center justify-center gap-2 text-sm font-medium text-slate-600 hover:text-brand" onClick={() => setOpen(true)}><LifeBuoy size={16} /> Emergency access ({EMERGENCY_DAYS} days)</button>
+      ) : (
+        <form onSubmit={apply} className="space-y-3">
+          <p className="text-sm text-slate-600">Call your software provider and tell them this <b>Lock ID</b> and <b>PC ID</b>. They will give you a one-time code that opens the software for {EMERGENCY_DAYS} days.</p>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-slate-50 p-2"><div className="text-[10px] uppercase text-slate-500">Lock ID</div><div className="font-mono text-lg font-bold tracking-wider">{lockId}</div></div>
+            <div className="rounded-lg bg-slate-50 p-2"><div className="text-[10px] uppercase text-slate-500">PC ID</div><div className="font-mono text-sm font-bold">{mid}</div></div>
+          </div>
+          <input className="input text-center font-mono text-lg uppercase tracking-[0.3em]" maxLength={9} placeholder="XXXXXXXX" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+          {msg && <p className={`rounded-lg px-3 py-2 text-sm ${msg.ok ? 'bg-emerald-50 text-ok' : 'bg-red-50 text-bad'}`}>{msg.text}</p>}
+          <button className="btn-ghost w-full" disabled={code.replace(/\W/g, '').length < 8}><LifeBuoy size={16} /> Unlock with emergency code</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function Splash() {
   return <div className="grid h-full place-items-center bg-navy text-white"><div className="flex items-center gap-3 text-xl font-semibold"><GraduationCap className="text-brand" size={32} /> ScholarDesk Pro</div></div>;
 }
@@ -77,6 +113,7 @@ function Activation({ onDone }: { onDone: () => Promise<Evaluation> }) {
         {mode === 'request' ? <RequestForm onDone={onDone} /> : <KeyForm onDone={onDone} />}
         <div className="flex items-center gap-2 border-t border-line bg-slate-50 px-6 py-2 text-xs text-slate-500"><Cpu size={14} /> This PC’s hardware ID: <b className="font-mono text-slate-700">{mid}</b></div>
       </div>
+      <div className="mt-4 rounded-xl bg-white/95"><EmergencyBox ev={null} onDone={onDone} /></div>
     </Shell>
   );
 }
@@ -104,7 +141,7 @@ function KeyForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
 }
 
 function RequestForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
-  const [f, setF] = useState<RegistrationForm>({ school_name: '', school_name_bn: '', contact_person: '', phone: '', email: '', address: '', district: '', students_estimate: null, requested_plan: 'TRIAL' });
+  const [f, setF] = useState<RegistrationForm>({ product: 'SCHOOL', school_name: '', school_name_bn: '', contact_person: '', phone: '', email: '', address: '', district: '', students_estimate: null, requested_plan: 'TRIAL' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = <K extends keyof RegistrationForm>(k: K, v: RegistrationForm[K]) => setF((p) => ({ ...p, [k]: v }));
@@ -119,8 +156,13 @@ function RequestForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
   return (
     <form onSubmit={submit} className="grid gap-3 p-6 sm:grid-cols-2">
       <p className="text-sm text-slate-500 sm:col-span-2">Fill in your school’s details. Your request goes to the software provider; the software unlocks automatically when it is approved.</p>
-      <label className="block sm:col-span-2"><span className="label">School name (English) *</span><input className="input" value={f.school_name} onChange={(e) => set('school_name', e.target.value)} required minLength={2} autoFocus /></label>
-      <label className="block sm:col-span-2"><span className="label">বিদ্যালয়ের নাম (বাংলা)</span><input className="input bn" value={f.school_name_bn} onChange={(e) => set('school_name_bn', e.target.value)} /></label>
+      <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+        {([['SCHOOL', 'School'], ['COACHING', 'Coaching centre']] as const).map(([v, l]) => (
+          <button type="button" key={v} onClick={() => set('product', v)} className={`rounded-lg border-2 px-3 py-2.5 text-sm font-semibold ${f.product === v ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-slate-600 hover:bg-slate-50'}`}>{l}</button>
+        ))}
+      </div>
+      <label className="block sm:col-span-2"><span className="label">{f.product === 'COACHING' ? 'Coaching centre' : 'School'} name (English) *</span><input className="input" value={f.school_name} onChange={(e) => set('school_name', e.target.value)} required minLength={2} autoFocus /></label>
+      <label className="block sm:col-span-2"><span className="label">{f.product === 'COACHING' ? 'কোচিং সেন্টারের নাম (বাংলা)' : 'বিদ্যালয়ের নাম (বাংলা)'}</span><input className="input bn" value={f.school_name_bn} onChange={(e) => set('school_name_bn', e.target.value)} /></label>
       <label className="block"><span className="label">Contact person *</span><input className="input" placeholder="Principal / owner" value={f.contact_person} onChange={(e) => set('contact_person', e.target.value)} required minLength={2} /></label>
       <label className="block"><span className="label">Mobile *</span><input className="input" inputMode="tel" placeholder="01XXXXXXXXX" value={f.phone} onChange={(e) => set('phone', e.target.value.replace(/\D/g, '').slice(0, 11))} required /></label>
       <label className="block"><span className="label">Email</span><input className="input" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} /></label>
@@ -159,6 +201,7 @@ function PendingScreen({ ev, onRetry }: { ev: Evaluation; onRetry: () => Promise
           {st.payment_instructions && <div className="rounded-lg border border-line p-4"><div className="label">Payment / contact</div><pre className="whitespace-pre-wrap font-sans text-sm">{st.payment_instructions}</pre></div>}
           <button className="btn-primary w-full py-3" onClick={check} disabled={busy}><RefreshCw size={18} className={busy ? 'animate-spin' : ''} /> {busy ? 'Checking…' : 'Check approval now'}</button>
           <p className="text-center text-xs text-slate-400">Checks automatically every minute{checked ? ` · last checked ${checked.toLocaleTimeString()}` : ''}.</p>
+          <EmergencyBox ev={ev} onDone={onRetry} />
         </div>
       </div>
     </Shell>
@@ -202,6 +245,7 @@ function LockScreen({ ev, onRetry }: { ev: Evaluation; onRetry: () => Promise<Ev
           {msg && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad">{msg}</p>}
           <button className="btn-primary w-full py-3 text-base" onClick={verify} disabled={busy}><RefreshCw size={18} className={busy ? 'animate-spin' : ''} /> {busy ? 'Contacting license server…' : 'Verify Payment & Sync Online Now'}</button>
           <p className="text-center text-xs text-slate-400">Your school data is safe on this PC. It unlocks immediately after successful verification.</p>
+          <EmergencyBox ev={ev} onDone={onRetry} />
         </div>
       </div>
     </Shell>
