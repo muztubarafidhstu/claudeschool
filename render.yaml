@@ -1,0 +1,37 @@
+# Render Blueprint — deploys the license API + admin panel together at https://scool.rafid5.com
+# Render dashboard -> New -> Blueprint -> pick this repo. Then fill the "sync: false" values.
+services:
+  - type: web
+    name: scholardesk-scool
+    runtime: node
+    plan: starter            # "free" also works but sleeps after 15 min (first sync then takes ~1 min)
+    region: singapore
+    branch: main
+    buildCommand: cd admin && npm ci --include=dev && npm run build && cd ../server && npm ci --include=dev && npm run build
+    startCommand: cd server && npm start
+    healthCheckPath: /api/v1/health
+    domains:
+      - scool.rafid5.com
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL          # Supabase -> Project Settings -> Database -> Connection string (URI)
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: ADMIN_PASSWORD_HASH   # from render-secret-env.txt
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: LICENSE_PRIVATE_KEY_PEM   # from render-secret-env.txt
+        sync: false
+      - key: LICENSE_PUBLIC_KEY_PEM    # from render-secret-env.txt
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://scool.rafid5.com
+      - key: ADMIN_STATIC_DIR
+        value: ../admin/out
+      - key: GRACE_DAYS
+        value: "7"

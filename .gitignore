@@ -9,3 +9,6 @@ target/
 server/keys/*.pem
 !server/keys/.gitkeep
 desktop/src-tauri/gen/
+.secrets-not-committed/
+*.tsbuildinfo
+admin/next-env.d.ts

@@ -11,12 +11,23 @@ import { addPeriod, todayUtc } from '../lib/dates.js';
 
 export const adminRouter = Router();
 
-const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10 });
+// Brute-force protection for the owner password:
+//  * per IP: 5 failed attempts per 15 minutes
+//  * whole server: 30 failed attempts per hour → login locked for everyone for 1 hour
+const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 5, skipSuccessfulRequests: true, message: { error: 'Too many attempts. Try again in 15 minutes.' } });
+let globalFails: number[] = [];
+let lockedUntil = 0;
 
 adminRouter.post('/login', loginLimiter, asyncH(async (req, res) => {
-  const { email, password } = z.object({ email: z.string(), password: z.string() }).parse(req.body);
-  const ok = email.toLowerCase() === config.adminEmail && (await bcrypt.compare(password, config.adminPasswordHash));
-  if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
+  const now = Date.now();
+  if (now < lockedUntil) return res.status(429).json({ error: 'Login is temporarily locked after many failed attempts. Try again later.' });
+  const { password } = z.object({ password: z.string().min(1).max(200), email: z.string().optional() }).parse(req.body);
+  if (!(await bcrypt.compare(password, config.adminPasswordHash))) {
+    globalFails = [...globalFails.filter((t) => now - t < 3_600_000), now];
+    if (globalFails.length >= 30) { lockedUntil = now + 3_600_000; globalFails = []; }
+    await new Promise((r) => setTimeout(r, 600)); // slow down guessing
+    return res.status(401).json({ error: 'Wrong password' });
+  }
   res.json({ token: await signAdminSession(config.adminEmail) });
 }));
 

@@ -18,7 +18,7 @@ Commercial school management system for private schools (Class 1–10). It has t
 +-----------------------------------+                                  +-------------------------------------------+
 ```
 
-Step-by-step build, deploy and sell guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. Screenshots are in [`docs/screenshots/`](docs/screenshots).
+Go live at **https://scool.rafid5.com**: **[docs/GO-LIVE-RAFID5.md](docs/GO-LIVE-RAFID5.md)**. Full build, deploy and sell guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Screenshots are in [`docs/screenshots/`](docs/screenshots).
 
 ## Quick start (local)
 

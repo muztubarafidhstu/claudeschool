@@ -159,7 +159,16 @@ export function FeeReceipt({ school, s, row, totalDue, att, attMonth }: { school
         <p className="mt-6 text-[11px] text-slate-500">This is a computer-generated receipt from ScholarDesk Pro. Please keep it for your records. Page 2 contains the student's attendance report for {monthLabel(attMonth)}.</p>
         <Signatures labels={['Depositor Signature', 'Office Seal', 'Accountant / Cashier']} />
       </div>
-      <div className="a4">
+      <StudentAttendanceReport school={school} s={s} att={att} attMonth={attMonth} />
+    </>
+  );
+}
+
+
+// ------------------------------------------------------------------ Student monthly attendance (also fee receipt page 2)
+export function StudentAttendanceReport({ school, s, att, attMonth }: { school: SchoolProfile; s: Student; att: MonthlyAttendance; attMonth: string }) {
+  return (
+    <div className="a4">
         <DocHeader school={school} title="Monthly Student Attendance Report" subtitle={monthLabel(attMonth)} />
         <Info rows={[['Student Name', <b>{s.name_en}</b>], ['Student ID / Roll', `${s.student_id} · Roll ${s.roll}`], ['Class / Section', `Class ${s.class_no}${s.section ? `-${s.section}` : ''}${s.stream ? ` · ${s.stream}` : ''}`]]} />
         <div className="my-5 grid grid-cols-4 gap-2 text-center">
@@ -171,7 +180,6 @@ export function FeeReceipt({ school, s, row, totalDue, att, attMonth }: { school
         <div className="mt-2 flex gap-4 text-[11px]"><span><span className="cell-p inline-block w-5">P</span> Present</span><span><span className="cell-a inline-block w-5">A</span> Absent</span><span><span className="cell-f inline-block w-5">F</span> Friday — Weekly Holiday</span><span>Blank = not recorded</span></div>
         <Signatures labels={['Guardian Signature', 'Class Teacher Signature', 'Principal Signature & Seal']} />
       </div>
-    </>
   );
 }
 

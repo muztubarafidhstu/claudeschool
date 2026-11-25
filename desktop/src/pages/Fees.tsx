@@ -10,7 +10,7 @@ import { headLabel, loadStudentFinance, type FeeHead, type LedgerRow, type Stude
 import { studentMonth, type MonthlyAttendance } from '../lib/attendance';
 import { MONTHS, fmtDate, money, monthKey, pad2, todayISO, uid } from '../lib/util';
 
-export default function Fees() {
+export default function Fees({ focus }: { focus?: { id: number; n: number } | null }) {
   const { settings, toast, bump } = useApp();
   const [st, setSt] = useState<Student | null>(null);
   const [fin, setFin] = useState<{ ledger: LedgerRow[]; heads: FeeHead[]; totalDue: number } | null>(null);
@@ -18,7 +18,7 @@ export default function Fees() {
   const [amount, setAmount] = useState(0);
   const [paidOn, setPaidOn] = useState(todayISO());
   const [note, setNote] = useState('');
-  const [receipt, setReceipt] = useState<{ row: LedgerRow; totalDue: number; att: MonthlyAttendance; attMonth: string } | null>(null);
+  const [receipt, setReceipt] = useState<{ row: LedgerRow; totalDue: number; att: MonthlyAttendance; attMonth: string; fresh?: boolean } | null>(null);
   const year = settings.academicYear;
 
   const options = [
@@ -27,9 +27,21 @@ export default function Fees() {
     { key: `HALF_YEARLY-${year}`, label: `Half Yearly Exam Fee ${year}` },
     { key: `FINAL-${year}`, label: `Final Exam Fee ${year}` },
   ];
+  // Previous-year dues (e.g. December of last year) also need to be payable.
+  for (const h of fin?.heads ?? []) if (h.due > 0 && !options.some((o) => o.key === h.key)) options.unshift({ key: h.key, label: `${h.label} (previous due)` });
 
-  async function load(s: Student) { setSt(s); setFin(await loadStudentFinance(s, settings)); }
-  useEffect(() => { if (st) void load(st); }, []); // eslint-disable-line
+  async function load(s: Student) {
+    const f = await loadStudentFinance(s, settings);
+    setSt(s); setFin(f);
+    // Pre-select the current month if it is still due, otherwise the oldest head that has a due amount.
+    const cur = f.heads.find((h) => h.key === monthKey());
+    if (!cur || cur.due === 0) { const firstDue = f.heads.find((h) => h.due > 0); if (firstDue) setHead(firstDue.key); }
+    else setHead(cur.key);
+  }
+  useEffect(() => {
+    if (!focus) return;
+    db.one<Student>('SELECT * FROM students WHERE id = ?', [focus.id]).then((s) => s && load(s));
+  }, [focus?.n]); // eslint-disable-line
 
   const regularFor = (key: string) => (!st ? 0 : key === 'ADMISSION' ? st.admission_fee : key.startsWith('HALF') ? settings.examFees.HALF_YEARLY : key.startsWith('FINAL') ? settings.examFees.FINAL : st.monthly_fee);
   const paidFor = (key: string) => fin?.ledger.filter((r) => r.period === key).reduce((a, r) => a + r.paid_amount, 0) ?? 0;
@@ -48,7 +60,7 @@ export default function Fees() {
     const nextFin = await loadStudentFinance(st, settings);
     setFin(nextFin);
     const attMonth = /^\d{4}-\d{2}$/.test(head) ? head : paidOn.slice(0, 7);
-    setReceipt({ row: { ...row, id: r.last_insert_id, student_id: st.id }, totalDue: nextFin.totalDue, att: await studentMonth(st.id, attMonth), attMonth });
+    setReceipt({ row: { ...row, id: r.last_insert_id, student_id: st.id }, totalDue: nextFin.totalDue, att: await studentMonth(st.id, attMonth), attMonth, fresh: true });
     setNote(''); bump();
     toast(`Payment of ${money(amount)} recorded`);
   }
@@ -82,7 +94,7 @@ export default function Fees() {
                 <Field label="Note (optional)"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
                 <div className="md:col-span-2 flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
                   <span className="text-sm">Due after this payment: <b className={remaining - amount > 0 ? 'text-due' : 'text-ok'}>{money(Math.max(0, remaining - amount))}</b></span>
-                  <button className="btn-primary" onClick={collect} disabled={!remaining}><Receipt size={16} /> Collect & Print 2-Page Receipt</button>
+                  <button className="btn-primary" onClick={collect} disabled={!remaining}><Receipt size={16} /> Save Payment & Print Receipt</button>
                 </div>
               </div>
             </Card>
@@ -109,7 +121,7 @@ export default function Fees() {
           </Card>
         </div>
       ) : <Card><Empty>Search a student to collect fees, partial payments or previous dues.</Empty></Card>}
-      <PrintPreview open={!!receipt} onClose={() => setReceipt(null)} title="Fee receipt + monthly attendance report (2 pages)">
+      <PrintPreview open={!!receipt} autoPrint={receipt?.fresh} onClose={() => setReceipt(null)} title="Fee receipt + monthly attendance report (2 pages)">
         {receipt && st && <FeeReceipt school={settings.school} s={st} row={receipt.row} totalDue={receipt.totalDue} att={receipt.att} attMonth={receipt.attMonth} />}
       </PrintPreview>
     </div>

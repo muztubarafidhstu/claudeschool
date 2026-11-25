@@ -13,7 +13,7 @@ import { getMachineId, httpFetch, invoke, isTauri } from './platform';
 import { db } from './db';
 import publicKeyPem from '../../src-tauri/keys/license_public.pem?raw';
 
-export const LICENSE_API = import.meta.env.VITE_LICENSE_API ?? 'https://api.yourdomain.com/api/v1';
+export const LICENSE_API = import.meta.env.VITE_LICENSE_API ?? 'https://scool.rafid5.com/api/v1';
 export const APP_VERSION = '1.0.0';
 export const GRACE_SECONDS = 7 * 86400;
 const CLOCK_TOLERANCE = 10 * 60; // 10 minutes of normal drift allowed

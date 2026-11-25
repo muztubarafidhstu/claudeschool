@@ -18,6 +18,9 @@ interface Ctx {
   closeStudent: () => void;
   dataVersion: number;
   bump: () => void;
+  /** Jump to a page, optionally with a student pre-selected (used by the profile action buttons). */
+  navigate: (page: string, studentId?: number) => void;
+  setNavigator: (fn: (page: string, studentId?: number) => void) => void;
   settingsUnlocked: boolean;
   setSettingsUnlocked: (v: boolean) => void;
 }
@@ -31,6 +34,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [openStudentId, setOpenStudentId] = useState<number | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
+  const navRef = useRef<(page: string, studentId?: number) => void>(() => {});
   const [pin, setPin] = useState<{ kind: PinKind; reason: string; resolve: (ok: boolean) => void } | null>(null);
 
   useEffect(() => { loadSettings().then(setSettings); }, []);
@@ -59,6 +63,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       settings, update, replaceSettings: setSettings, t: (k) => translate(lang, k), requirePin, toast,
       openStudent: setOpenStudentId, openStudentId, closeStudent: () => setOpenStudentId(null),
       dataVersion, bump: () => setDataVersion((v) => v + 1), settingsUnlocked, setSettingsUnlocked,
+      navigate: (p, id) => { setOpenStudentId(null); navRef.current(p, id); }, setNavigator: (fn) => { navRef.current = fn; },
     }}>
       {children}
       {pin && <PinDialog kind={pin.kind} reason={pin.reason} onDone={(ok) => { pin.resolve(ok); setPin(null); }} />}

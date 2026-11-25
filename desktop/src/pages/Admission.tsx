@@ -61,7 +61,8 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
     return null;
   }
 
-  async function submit() {
+  /** Saves the record. Returns true on success (form is reset by finish()). */
+  async function submit(): Promise<boolean> {
     setBusy(true);
     try {
       const vals = { ...f, student_id: studentId, section: settings.modules.sections ? f.section || 'A' : 'A', stream: f.class_no >= 9 ? f.stream : null };
@@ -85,11 +86,26 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
         toast(`Admission confirmed — Student ID ${studentId}`);
       }
       bump();
-      setReview(false);
-      if (editing) onDone(); else { setF(blank(settings.academicYear)); setF((p) => ({ ...p, class_no: vals.class_no, section: vals.section, stream: vals.stream })); }
+      return true;
     } catch (e: any) {
       toast(e.message ?? String(e), 'err');
+      return false;
     } finally { setBusy(false); }
+  }
+
+  function finish() {
+    setReview(false);
+    if (editing) return onDone();
+    const keep = { class_no: f.class_no, section: f.section, stream: f.stream };
+    setF({ ...blank(settings.academicYear), ...keep });
+  }
+
+  /** Save first (so a failed save is never printed), then open the print / Save-as-PDF dialog. */
+  async function printAndSubmit() {
+    if (!(await submit())) return;
+    await document.fonts.ready;
+    window.print();
+    finish();
   }
 
   async function openReview() {
@@ -127,7 +143,7 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
             <Field label="Blood Group"><select className="input" value={f.blood_group ?? ''} onChange={(e) => set('blood_group', e.target.value)}><option value="">—</option>{BLOOD_GROUPS.map((b) => <option key={b}>{b}</option>)}</select></Field>
             <Field label="Birth Certificate Number" className="md:col-span-2"><input className="input" value={f.birth_cert_no ?? ''} onChange={(e) => set('birth_cert_no', e.target.value)} /></Field>
           </div>
-          <Field label="Photo"><PhotoInput value={f.photo} onChange={(v) => set('photo', v)} /></Field>
+          <div><span className="label">Photo</span><PhotoInput value={f.photo} onChange={(v) => set("photo", v)} /></div>
         </div>
       </Card>
 
@@ -157,13 +173,14 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
         <button className="btn-primary px-6 py-3" onClick={openReview}><FileCheck2 size={18} /> Review A4 Summary {editing ? '& Save' : '& Invoice'}</button>
       </div>
 
-      <PrintPreview open={review} onClose={() => setReview(false)} title={editing ? 'Review changes' : 'Admission review — check before submitting'}
+      <PrintPreview open={review} hidePrint onClose={() => setReview(false)} title={editing ? 'Review changes' : 'Admission review — check, then print & submit'}
         actions={<>
           <button className="btn border border-white/20 text-white hover:bg-white/10" onClick={() => setReview(false)}><Pencil size={16} /> Modify / Edit Info</button>
-          <button className="btn bg-ok text-white hover:bg-emerald-600" disabled={busy} onClick={submit}><Send size={16} /> {editing ? 'Confirm & Save Changes' : 'Confirm & Submit Admission'}</button>
+          <button className="btn border border-white/20 text-white hover:bg-white/10" disabled={busy} onClick={async () => { if (await submit()) finish(); }}><Send size={16} /> Submit only</button>
+          <button className="btn bg-ok text-white hover:bg-emerald-600" disabled={busy} onClick={printAndSubmit}><Printer size={16} /> {editing ? 'Save Changes & Print' : 'Print / Save PDF & Submit'}</button>
         </>}>
         <AdmissionInvoice school={settings.school} s={{ ...f, student_id: studentId }} paid={editing ? 0 : paid} showFees={settings.modules.fees && !editing} />
-        <p className="no-print mt-2 text-center text-sm text-white/70"><Printer size={14} className="inline" /> Print now, or after submitting reopen from the Student Directory.</p>
+        <p className="no-print mt-2 text-center text-sm text-white/70">“Print / Save PDF &amp; Submit” saves the admission and then opens the printer / Save-as-PDF dialog.</p>
       </PrintPreview>
     </div>
   );

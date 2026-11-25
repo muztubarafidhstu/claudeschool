@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { Lock, ShieldCheck, Plus, Trash2, Download, Upload, Sparkles, ArrowUpCircle, KeyRound, School } from 'lucide-react';
+import { createContext, useContext, useState } from 'react';
+import { Save, Undo2, Lock, ShieldCheck, Plus, Trash2, Download, Upload, Sparkles, ArrowUpCircle, KeyRound, School } from 'lucide-react';
 import { useApp } from '../components/AppContext';
 import { Card, Field, Modal, Switch, Tabs, Empty } from '../components/ui';
 import { CLASSES, SECTION_LETTERS, money } from '../lib/util';
-import { SUBJECT_GROUPS, applyImportedConfig, exportableConfig, saveSettings, type Modules } from '../lib/config';
+import { SUBJECT_GROUPS, applyImportedConfig, exportableConfig, saveSettings, type AppSettings, type Modules } from '../lib/config';
+import { PREVIEW_BUILD } from './LicenseGate';
+import { LICENSE_API } from '../lib/license';
 import { changePin } from '../lib/pin';
 import { importDemoData } from '../lib/demo';
 import { previewPromotion, runPromotion, type PromotionPreview } from '../lib/promotion';
@@ -13,9 +15,34 @@ import { useEffect } from 'react';
 
 type Tab = 'modules' | 'classes' | 'subjects' | 'school' | 'security' | 'data';
 
+/** Settings tabs edit a draft; nothing is stored until "Save changes" is pressed. */
+const DraftCtx = createContext<{ d: AppSettings; set: (patch: Partial<AppSettings>) => void }>(null as never);
+const useDraft = () => { const c = useContext(DraftCtx); return { settings: c.d, update: c.set }; };
+
+function SaveBar({ dirty, onSave, onDiscard }: { dirty: boolean; onSave: () => void; onDiscard: () => void }) {
+  return (
+    <div className={`sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 shadow-sm ${dirty ? 'border-due bg-amber-50' : 'border-line bg-white'}`}>
+      <span className={`text-sm ${dirty ? 'font-semibold text-amber-800' : 'text-slate-500'}`}>{dirty ? 'You have unsaved changes.' : 'All changes saved.'}</span>
+      <div className="flex gap-2">
+        <button className="btn-ghost" disabled={!dirty} onClick={onDiscard}><Undo2 size={16} /> Discard</button>
+        <button className="btn-primary px-6" disabled={!dirty} onClick={onSave}><Save size={16} /> Save changes</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
-  const { settingsUnlocked, setSettingsUnlocked, requirePin } = useApp();
+  const { settings, replaceSettings, toast, settingsUnlocked, setSettingsUnlocked, requirePin } = useApp();
   const [tab, setTab] = useState<Tab>('modules');
+  const [draft, setDraft] = useState<AppSettings>(settings);
+  const [base, setBase] = useState<AppSettings>(settings);
+  if (settings !== base) { setBase(settings); setDraft(settings); } // settings replaced elsewhere (import/restore)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  const save = async () => {
+    for (let c = 1; c <= 10; c++) if (!(draft.subjects[c <= 8 ? `C${c}` : 'C9-10-Science'] ?? []).every((x) => x.name.trim() && x.full > 0)) return toast('Every subject needs a name and full marks above 0.', 'err');
+    await saveSettings(draft); replaceSettings(draft); toast('Settings saved');
+  };
+  const lock = () => { if (dirty && !confirm('You have unsaved changes. Lock settings and discard them?')) return; setDraft(settings); setSettingsUnlocked(false); };
   if (!settingsUnlocked) {
     return (
       <div className="grid h-full place-items-center">
@@ -32,24 +59,27 @@ export default function Settings() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Settings & Control</h1>
-        <button className="btn-danger" onClick={() => setSettingsUnlocked(false)}><Lock size={16} /> Lock Settings</button>
+        <button className="btn-danger" onClick={lock}><Lock size={16} /> Lock Settings</button>
       </div>
       <Tabs value={tab} onChange={setTab} items={[
         { value: 'modules', label: 'Modules' }, { value: 'classes', label: 'Classes & Sections' }, { value: 'subjects', label: 'Subjects & Marks' },
         { value: 'school', label: 'School & Fees' }, { value: 'security', label: 'PINs & License' }, { value: 'data', label: 'Data, Config & Promotion' },
       ]} />
-      {tab === 'modules' && <ModulesTab />}
-      {tab === 'classes' && <ClassesTab />}
-      {tab === 'subjects' && <SubjectsTab />}
-      {tab === 'school' && <SchoolTab />}
+      <DraftCtx.Provider value={{ d: draft, set: (patch) => setDraft((p) => ({ ...p, ...patch })) }}>
+        {tab === 'modules' && <ModulesTab />}
+        {tab === 'classes' && <ClassesTab />}
+        {tab === 'subjects' && <SubjectsTab />}
+        {tab === 'school' && <SchoolTab />}
+        {['modules', 'classes', 'subjects', 'school'].includes(tab) && <SaveBar dirty={dirty} onSave={save} onDiscard={() => setDraft(settings)} />}
+      </DraftCtx.Provider>
       {tab === 'security' && <SecurityTab />}
-      {tab === 'data' && <DataTab />}
+      {tab === 'data' && <DataTab dirty={dirty} />}
     </div>
   );
 }
 
 function ModulesTab() {
-  const { settings, update } = useApp();
+  const { settings, update } = useDraft();
   const items: { key: keyof Modules; label: string; desc: string }[] = [
     { key: 'exams', label: 'Exam & Result Management', desc: 'Marks entry, GPA calculation and A4 marksheets.' },
     { key: 'payroll', label: 'Teacher & Staff Salary (Payroll)', desc: 'Staff registration, salary disbursement and A4 payslips.' },
@@ -67,7 +97,7 @@ function ModulesTab() {
 }
 
 function ClassesTab() {
-  const { settings, update } = useApp();
+  const { settings, update } = useDraft();
   return (
     <Card title="Independent section count per class">
       {!settings.modules.sections ? <Empty>Turn ON “Class Sections Division” in Modules to configure sections.</Empty> : (
@@ -87,7 +117,7 @@ function ClassesTab() {
 }
 
 function SubjectsTab() {
-  const { settings, update } = useApp();
+  const { settings, update } = useDraft();
   const [group, setGroup] = useState('C1');
   const [name, setName] = useState(''); const [nameBn, setNameBn] = useState(''); const [full, setFull] = useState(100);
   const list = settings.subjects[group] ?? [];
@@ -117,7 +147,7 @@ function SubjectsTab() {
 }
 
 function SchoolTab() {
-  const { settings, update } = useApp();
+  const { settings, update } = useDraft();
   const s = settings.school;
   const setS = (patch: Partial<typeof s>) => update({ school: { ...s, ...patch } });
   return (
@@ -160,6 +190,7 @@ function SecurityTab() {
   const { toast } = useApp();
   const [lic, setLic] = useState<Awaited<ReturnType<typeof loadLicense>>>(null);
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => { loadLicense().then(setLic); }, []);
   const PinForm = ({ kind, label }: { kind: 'settings' | 'modify'; label: string }) => {
     const [cur, setCur] = useState(''); const [next, setNext] = useState('');
@@ -179,22 +210,40 @@ function SecurityTab() {
       <Card title="Security PINs"><div className="space-y-3 p-4"><PinForm kind="settings" label="Settings & System Control PIN (default 0000)" /><PinForm kind="modify" label="Modify & Delete Protection PIN (default 5555)" /></div></Card>
       <Card title="License & subscription">
         <div className="space-y-2 p-4 text-sm">
-          {lic && [['School', lic.school_name], ['License key', lic.license_key], ['This PC', lic.machine_id], ['Status', lic.status], ['Valid until', lic.valid_until], ['Last online verification', lic.last_online_sync ? new Date(lic.last_online_sync * 1000).toLocaleString() : '—']].map(([k, v]) => (
-            <div key={k} className="flex justify-between border-b border-slate-100 py-1.5"><span className="text-slate-500">{k}</span><b className="font-mono text-xs">{v}</b></div>
-          ))}
-          <button className="btn-primary mt-3" disabled={busy} onClick={async () => { setBusy(true); const r = await syncOnline(); setBusy(false); setLic(await loadLicense()); toast(r.ok ? 'License verified online' : r.message ?? 'Failed', r.ok ? 'ok' : 'err'); }}>Verify & sync online now</button>
+          {PREVIEW_BUILD ? (
+            <div className="rounded-lg bg-amber-50 p-4 text-amber-800">
+              <b>Preview build — licensing is switched off.</b>
+              <p className="mt-1">This test installer does not contact the license server. Customer builds activate with a School License Key and are controlled from <b>{LICENSE_API.replace('/api/v1', '')}</b>.</p>
+            </div>
+          ) : !lic ? (
+            <p className="text-slate-500">No license information stored on this PC.</p>
+          ) : (
+            <>
+              {[['School', lic.school_name], ['License key', lic.license_key], ['This PC', lic.machine_id], ['Status', lic.status], ['Valid until', lic.valid_until], ['Last online verification', lic.last_online_sync ? new Date(lic.last_online_sync * 1000).toLocaleString() : '—'], ['License server', LICENSE_API.replace('/api/v1', '')]].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4 border-b border-slate-100 py-1.5"><span className="text-slate-500">{k}</span><b className={`text-right font-mono text-xs ${k === 'Status' ? (v === 'ACTIVE' ? 'text-ok' : 'text-bad') : ''}`}>{v ?? '—'}</b></div>
+              ))}
+              {msg && <p className={`rounded-lg px-3 py-2 ${msg.ok ? 'bg-emerald-50 text-ok' : 'bg-red-50 text-bad'}`}>{msg.text}</p>}
+              <button className="btn-primary mt-3" disabled={busy} onClick={async () => {
+                setBusy(true); setMsg(null);
+                const r = await syncOnline();
+                setBusy(false); setLic(await loadLicense());
+                setMsg(r.ok ? { ok: true, text: 'License verified online.' } : { ok: false, text: r.message || `Status: ${r.status ?? 'offline'}` });
+              }}>{busy ? 'Checking…' : 'Verify & sync online now'}</button>
+            </>
+          )}
         </div>
       </Card>
     </div>
   );
 }
 
-function DataTab() {
+function DataTab({ dirty }: { dirty: boolean }) {
   const { settings, replaceSettings, toast, bump, requirePin } = useApp();
   const [preview, setPreview] = useState<PromotionPreview[] | null>(null);
   const [busy, setBusy] = useState(false);
   return (
     <div className="grid gap-5 lg:grid-cols-2">
+      {dirty && <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800 lg:col-span-2">You have unsaved changes in another tab. Save them first so the exported configuration includes them.</p>}
       <Card title="Settings configuration (.json)">
         <div className="space-y-3 p-4">
           <p className="text-sm text-slate-600">Export module switches, per-class sections, subjects, fee defaults and the school profile — then import on a new PC to auto-configure everything.</p>

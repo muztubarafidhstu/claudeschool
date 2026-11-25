@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Printer, Phone, MapPin, Droplet } from 'lucide-react';
+import { Eye, EyeOff, Printer, Phone, MapPin, Droplet, Wallet, PenLine, CalendarCheck, FileText, Pencil } from 'lucide-react';
 import { useApp } from './AppContext';
 import { Modal, Badge, Empty } from './ui';
 import PrintPreview from './PrintPreview';
-import { Marksheet } from '../docs/Documents';
+import { AdmissionInvoice, Marksheet, StudentAttendanceReport } from '../docs/Documents';
+import { studentMonth, type MonthlyAttendance } from '../lib/attendance';
 import { db } from '../lib/db';
 import { loadStudentFinance, type FeeHead, type LedgerRow, type Student } from '../lib/fees';
 import { calculate, type MarkLine } from '../lib/grading';
-import { fmtDate, money } from '../lib/util';
+import { fmtDate, money, monthKey } from '../lib/util';
 
 interface ResultRow { id: number; exam: string; academic_year: number; marks_json: string; obtained: number; total_full: number; percentage: number; gpa: number; grade: string; passed: number }
 
 /** Omnibox target: Personal profile + fee/due history FIRST; results hidden until "View Result". */
 export default function StudentProfile() {
-  const { openStudentId, closeStudent, settings, t, dataVersion } = useApp();
+  const { openStudentId, closeStudent, settings, t, dataVersion, navigate, requirePin } = useApp();
+  const [doc, setDoc] = useState<null | { kind: 'admission' } | { kind: 'attendance'; att: MonthlyAttendance; ym: string }>(null);
   const [s, setS] = useState<Student | null>(null);
   const [fin, setFin] = useState<{ ledger: LedgerRow[]; heads: FeeHead[]; totalDue: number } | null>(null);
   const [results, setResults] = useState<ResultRow[] | null>(null);
@@ -35,6 +37,15 @@ export default function StudentProfile() {
   }
 
   if (!s) return null;
+  const m = settings.modules;
+  const admissionPaid = fin?.ledger.filter((r) => r.period === 'ADMISSION').reduce((a, r) => a + r.paid_amount, 0) ?? 0;
+  const actions = [
+    m.fees && { label: 'Pay Fee / Collect Bill', icon: Wallet, primary: true, run: () => navigate('fees', s.id) },
+    m.exams && { label: 'Enter / Edit Marks', icon: PenLine, run: () => navigate('exams', s.id) },
+    m.attendance && { label: 'Attendance Report (this month)', icon: CalendarCheck, run: async () => { const ym = monthKey(); setDoc({ kind: 'attendance', att: await studentMonth(s.id, ym), ym }); } },
+    { label: 'Print Admission Form', icon: FileText, run: () => setDoc({ kind: 'admission' }) },
+    { label: 'Edit Student Info', icon: Pencil, run: async () => { if (await requirePin('modify', `Edit the saved record of ${s.name_en}?`)) navigate('edit-student', s.id); } },
+  ].filter(Boolean) as { label: string; icon: typeof Wallet; primary?: boolean; run: () => void }[];
   const dueHeads = fin?.heads.filter((h) => h.due > 0) ?? [];
   return (
     <>
@@ -62,6 +73,12 @@ export default function StudentProfile() {
               <div><span className="text-slate-500">Admitted:</span> {fmtDate(s.admission_date)}</div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2 rounded-xl border border-line bg-slate-50 p-3">
+          {actions.map(({ label, icon: Icon, primary, run }) => (
+            <button key={label} className={primary ? 'btn-primary' : 'btn-ghost'} onClick={run}><Icon size={16} /> {label}</button>
+          ))}
         </div>
 
         {settings.modules.fees && fin && (
@@ -103,7 +120,7 @@ export default function StudentProfile() {
                       <div><div className="text-xs text-slate-500">GPA</div><b>{r.gpa.toFixed(2)}</b></div>
                       <div><div className="text-xs text-slate-500">Grade</div><b>{r.grade}</b></div>
                     </div>
-                    <button className="btn-ghost btn-sm mt-3 w-full" onClick={() => setPrint(r)}><Printer size={14} /> A4 Marksheet</button>
+                    <button className="btn-ghost btn-sm mt-3 w-full" onClick={() => setPrint(r)}><Printer size={14} /> Download / Print Marksheet</button>
                   </div>
                 ))}
                 {!results.length && <p className="text-sm text-slate-400">No results recorded yet.</p>}
@@ -112,6 +129,10 @@ export default function StudentProfile() {
           </div>
         )}
       </Modal>
+      <PrintPreview open={!!doc} onClose={() => setDoc(null)} title={doc?.kind === 'admission' ? 'Admission form' : 'Monthly attendance report'}>
+        {doc?.kind === 'admission' && <AdmissionInvoice school={settings.school} s={s} paid={admissionPaid} showFees={m.fees} />}
+        {doc?.kind === 'attendance' && <StudentAttendanceReport school={settings.school} s={s} att={doc.att} attMonth={doc.ym} />}
+      </PrintPreview>
       <PrintPreview open={!!print} onClose={() => setPrint(null)} title="Marksheet">
         {print && <Marksheet school={settings.school} s={s} exam={print.exam} year={print.academic_year} calc={calculate(JSON.parse(print.marks_json) as MarkLine[])} />}
       </PrintPreview>

@@ -21,11 +21,14 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   databaseSsl: process.env.DATABASE_SSL === 'true',
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
-  adminEmail: required('ADMIN_EMAIL').toLowerCase(),
+  adminEmail: (process.env.ADMIN_EMAIL ?? 'owner').toLowerCase(),
   adminPasswordHash: required('ADMIN_PASSWORD_HASH'),
   adminJwtSecret: new TextEncoder().encode(required('ADMIN_JWT_SECRET')),
   privateKeyPem: readPem('LICENSE_PRIVATE_KEY_PEM', 'LICENSE_PRIVATE_KEY_PATH'),
   publicKeyPem: readPem('LICENSE_PUBLIC_KEY_PEM', 'LICENSE_PUBLIC_KEY_PATH'),
   graceDays: Number(process.env.GRACE_DAYS ?? 7),
   releasesDir: path.resolve(process.env.RELEASES_DIR ?? './releases'),
+  /** Built admin panel (admin/out). When present, the same service serves the panel at "/". */
+  adminStaticDir: path.resolve(process.env.ADMIN_STATIC_DIR ?? '../admin/out'),
+  autoMigrate: process.env.AUTO_MIGRATE !== 'false',
 };

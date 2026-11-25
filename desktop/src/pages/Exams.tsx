@@ -14,7 +14,7 @@ import type { Student } from '../lib/fees';
 type Exam = 'HALF_YEARLY' | 'FINAL';
 interface ResultRow { student_id: number; exam: Exam; obtained: number; total_full: number; percentage: number; gpa: number; grade: string; passed: number; marks_json: string }
 
-export default function Exams() {
+export default function Exams({ focus }: { focus?: { id: number; n: number } | null }) {
   const { settings, dataVersion } = useApp();
   const [sel, setSel] = useState({ classNo: 1, section: '', stream: null as string | null });
   const [exam, setExam] = useState<Exam>('HALF_YEARLY');
@@ -30,6 +30,15 @@ export default function Exams() {
     db.select<Student>(`SELECT * FROM students WHERE status='active' AND class_no = ?${w.map((x) => ` AND ${x}`).join('')} ORDER BY roll`, p).then(setStudents);
     db.select<ResultRow>('SELECT * FROM exam_results WHERE academic_year = ? AND exam = ? AND class_no = ?', [year, exam, sel.classNo]).then((r) => setResults(new Map(r.map((x) => [x.student_id, x]))));
   }, [sel, exam, year, dataVersion, settings.modules.sections]);
+
+  useEffect(() => {
+    if (!focus) return;
+    db.one<Student>('SELECT * FROM students WHERE id = ?', [focus.id]).then((s) => {
+      if (!s) return;
+      setSel({ classNo: s.class_no, section: '', stream: s.class_no >= 9 ? s.stream : null });
+      setOpen(s);
+    });
+  }, [focus?.n]);
 
   const ranked = useMemo(() => [...results.values()].sort((a, b) => b.obtained - a.obtained).map((r) => r.student_id), [results]);
   const done = students.filter((s) => results.has(s.id)).length;
@@ -80,7 +89,7 @@ function MarksModal({ student, initialExam, onClose }: { student: Student; initi
   const [exam, setExam] = useState<Exam>(initialExam);
   const [lines, setLines] = useState<MarkLine[]>([]);
   const [existing, setExisting] = useState<ResultRow | null>(null);
-  const [print, setPrint] = useState(false);
+  const [print, setPrint] = useState<false | 'view' | 'auto'>(false);
   const year = settings.academicYear;
   const subjects = settings.subjects[subjectGroup(student.class_no, student.stream)] ?? [];
 
@@ -95,9 +104,9 @@ function MarksModal({ student, initialExam, onClose }: { student: Student; initi
   const calc = calculate(lines);
   const invalid = lines.some((l) => l.obtained < 0 || l.obtained > l.full);
 
-  async function save() {
-    if (invalid) return toast('Marks cannot exceed full marks.', 'err');
-    if (existing && !(await requirePin('modify', 'Editing an already-submitted result requires the Modify PIN.'))) return;
+  async function save(): Promise<boolean> {
+    if (invalid) { toast('Marks cannot exceed full marks.', 'err'); return false; }
+    if (existing && !(await requirePin('modify', 'Editing an already-submitted result requires the Modify PIN.'))) return false;
     await db.execute(`INSERT INTO exam_results(student_id, academic_year, exam, class_no, section, stream, marks_json, total_full, obtained, percentage, gpa, grade, passed)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(student_id, academic_year, exam) DO UPDATE SET marks_json=excluded.marks_json, total_full=excluded.total_full, obtained=excluded.obtained,
@@ -106,14 +115,16 @@ function MarksModal({ student, initialExam, onClose }: { student: Student; initi
     toast(`Result ${existing ? 'updated' : 'submitted'}: GPA ${calc.gpa.toFixed(2)} (${calc.grade})`);
     bump();
     setExisting({ ...(existing ?? ({} as ResultRow)), obtained: calc.obtained } as ResultRow);
+    return true;
   }
 
   return (
     <>
       <Modal open onClose={onClose} width="max-w-3xl" title={`Marks Entry · ${student.name_en} · Class ${student.class_no}${student.stream ? ` ${student.stream}` : ''} · Roll ${student.roll}`}
         footer={<>
-          <button className="btn-ghost" onClick={() => setPrint(true)} disabled={!existing}><Printer size={16} /> Print A4 Marksheet</button>
-          <button className="btn-primary" onClick={save}>{existing ? <Lock size={16} /> : <Save size={16} />} {existing ? 'Update Result (PIN)' : 'Submit Result'}</button>
+          {existing && <button className="btn-ghost" onClick={() => setPrint('view')}><Printer size={16} /> Print saved marksheet</button>}
+          <button className="btn-ghost" onClick={save}>{existing ? <Lock size={16} /> : <Save size={16} />} {existing ? 'Update only (PIN)' : 'Submit only'}</button>
+          <button className="btn-primary" onClick={async () => { if (await save()) setPrint('auto'); }}><Printer size={16} /> {existing ? 'Update & Print (PIN)' : 'Submit & Print Marksheet'}</button>
         </>}>
         <div className="mb-4 flex items-center justify-between">
           <Tabs value={exam} onChange={setExam} items={[{ value: 'HALF_YEARLY', label: 'Half Yearly Exam' }, { value: 'FINAL', label: 'Final Exam' }]} />
@@ -140,7 +151,7 @@ function MarksModal({ student, initialExam, onClose }: { student: Student; initi
           ))}
         </div>
       </Modal>
-      <PrintPreview open={print} onClose={() => setPrint(false)} title="Marksheet"><Marksheet school={settings.school} s={student} exam={exam} year={year} calc={calc} /></PrintPreview>
+      <PrintPreview open={!!print} autoPrint={print === 'auto'} onClose={() => setPrint(false)} title="Marksheet"><Marksheet school={settings.school} s={student} exam={exam} year={year} calc={calc} /></PrintPreview>
     </>
   );
 }

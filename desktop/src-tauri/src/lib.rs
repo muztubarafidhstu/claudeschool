@@ -43,6 +43,12 @@ fn start_oauth_listener(app: tauri::AppHandle) -> CmdResult<u16> {
 
 pub fn run() {
     tauri::Builder::default()
+        // Grant the webcam to our own app window (student/staff photo capture) instead of
+        // relying on the WebView2/WKWebView prompt, which can be hidden or remembered as "Block".
+        .on_permission_request(|_, kind| match kind {
+            tauri::webview::PermissionKind::Camera => tauri::webview::PermissionResponse::Allow,
+            _ => tauri::webview::PermissionResponse::Default,
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

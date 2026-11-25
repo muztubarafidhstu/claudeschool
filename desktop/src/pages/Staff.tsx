@@ -20,7 +20,7 @@ export default function Staff() {
   const [q, setQ] = useState('');
   const [form, setForm] = useState<Partial<StaffRow> | null>(null);
   const [pay, setPay] = useState<StaffRow | null>(null);
-  const [slip, setSlip] = useState<{ staff: StaffRow; row: SalaryRow; dueTotal: number } | null>(null);
+  const [slip, setSlip] = useState<{ staff: StaffRow; row: SalaryRow; dueTotal: number; fresh?: boolean } | null>(null);
   const ym = monthKey();
 
   useEffect(() => {
@@ -100,13 +100,13 @@ export default function Staff() {
               <Field label="Monthly salary"><input type="number" className="input" value={form.monthly_salary ?? 0} onChange={(e) => setForm({ ...form, monthly_salary: Number(e.target.value) })} /></Field>
               <Field label="Address" className="md:col-span-2"><input className="input" value={form.address ?? ''} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
             </div>
-            <Field label="Photo"><PhotoInput value={form.photo ?? null} onChange={(v) => setForm({ ...form, photo: v })} /></Field>
+            <div><span className="label">Photo</span><PhotoInput value={form.photo ?? null} onChange={(v) => setForm({ ...form, photo: v })} /></div>
           </div>
         )}
       </Modal>
 
-      {pay && <PayModal staff={pay} onClose={() => setPay(null)} onPaid={(row, dueTotal) => { setPay(null); setSlip({ staff: pay, row, dueTotal }); bump(); }} onSlip={(row, dueTotal) => setSlip({ staff: pay, row, dueTotal })} />}
-      <PrintPreview open={!!slip} onClose={() => setSlip(null)} title="Salary payslip">{slip && <Payslip school={settings.school} staff={slip.staff} row={slip.row} dueTotal={slip.dueTotal} />}</PrintPreview>
+      {pay && <PayModal staff={pay} onClose={() => setPay(null)} onPaid={(row, dueTotal) => { setPay(null); setSlip({ staff: pay, row, dueTotal, fresh: true }); bump(); }} onSlip={(row, dueTotal) => setSlip({ staff: pay, row, dueTotal })} />}
+      <PrintPreview open={!!slip} autoPrint={slip?.fresh} onClose={() => setSlip(null)} title="Salary payslip">{slip && <Payslip school={settings.school} staff={slip.staff} row={slip.row} dueTotal={slip.dueTotal} />}</PrintPreview>
     </div>
   );
 }

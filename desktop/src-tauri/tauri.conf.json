@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ScholarDesk Pro",
   "version": "1.0.0",
-  "identifier": "com.yourdomain.scholardesk",
+  "identifier": "com.rafid5.scholardesk",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost https://api.yourdomain.com https://oauth2.googleapis.com https://www.googleapis.com"
+      "csp": "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost https://scool.rafid5.com https://oauth2.googleapis.com https://www.googleapis.com"
     }
   },
   "bundle": {
@@ -41,7 +41,7 @@
   "plugins": {
     "updater": {
       "pubkey": "REPLACE_WITH_OUTPUT_OF__npx_tauri_signer_generate",
-      "endpoints": ["https://api.yourdomain.com/api/v1/updates/{{target}}/{{arch}}/{{current_version}}"],
+      "endpoints": ["https://scool.rafid5.com/api/v1/updates/{{target}}/{{arch}}/{{current_version}}"],
       "windows": { "installMode": "passive" }
     }
   }

@@ -17,10 +17,19 @@ import type { Evaluation } from './lib/license';
 import { checkForUpdates } from './lib/updater';
 
 function Main({ banner }: { banner: Evaluation | null }) {
-  const { settings, setSettingsUnlocked } = useApp();
+  const { settings, setSettingsUnlocked, setNavigator } = useApp();
   const [page, setPageRaw] = useState<Page>('dashboard');
   const [editId, setEditId] = useState<number | null>(null);
-  const setPage = (p: Page) => { if (p !== 'settings') setSettingsUnlocked(false); setEditId(null); setPageRaw(p); };
+  const [focusStudent, setFocusStudent] = useState<{ id: number; n: number } | null>(null);
+  const setPage = (p: Page) => { if (p !== 'settings') setSettingsUnlocked(false); setEditId(null); setFocusStudent(null); setPageRaw(p); };
+  // Profile action buttons: navigate('fees' | 'exams' | 'edit-student', studentId)
+  useEffect(() => setNavigator((p, id) => {
+    setSettingsUnlocked(false);
+    if (p === 'edit-student') { setEditId(id ?? null); setPageRaw('admission'); return; }
+    setEditId(null);
+    setFocusStudent(id ? { id, n: Date.now() } : null);
+    setPageRaw(p as Page);
+  }), [setNavigator, setSettingsUnlocked]);
   // Dynamic UI pruning: if the current page's module gets switched off, fall back to the dashboard.
   useEffect(() => { if (!isPageEnabled(page, settings.modules)) setPageRaw('dashboard'); }, [settings.modules, page]);
   useEffect(() => { void checkForUpdates(); }, []);
@@ -29,11 +38,11 @@ function Main({ banner }: { banner: Evaluation | null }) {
   return (
     <Layout page={page} setPage={setPage} banner={banner}>
       {page === 'dashboard' && <Dashboard go={setPage} />}
-      {page === 'admission' && <Admission editId={editId} onDone={() => setPage('students')} />}
+      {page === 'admission' && <Admission key={editId ?? 'new'} editId={editId} onDone={() => setPage('students')} />}
       {page === 'students' && <Students onEdit={(id) => { setEditId(id); setPageRaw('admission'); }} />}
       {page === 'attendance' && <Attendance />}
-      {page === 'exams' && <Exams />}
-      {page === 'fees' && <Fees />}
+      {page === 'exams' && <Exams focus={focusStudent} />}
+      {page === 'fees' && <Fees focus={focusStudent} />}
       {page === 'staff' && <Staff />}
       {page === 'backup' && <Backup />}
       {page === 'settings' && <SettingsPage />}

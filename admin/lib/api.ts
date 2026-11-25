@@ -1,5 +1,6 @@
 'use client';
-export const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080/api/v1';
+// Same-origin by default (panel and API are served together at https://scool.rafid5.com).
+export const API = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 
 export function getToken() {
   if (typeof window === 'undefined') return null;
