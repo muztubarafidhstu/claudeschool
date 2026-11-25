@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain (rafid0.com must be on Cloudflare DNS). Cloudflare creates the DNS record and HTTPS certificate.
+workers_dev = false
+routes = [ { pattern = "school.rafid0.com", custom_domain = true } ]
+
 # Admin panel (Next.js static export in ../admin/out) served by the same Worker.
 # Requests that match a file are served for free without running the Worker; /api/* runs the Worker.
 [assets]
@@ -13,7 +17,7 @@ not_found_handling = "404-page"
 [[d1_databases]]
 binding = "DB"
 database_name = "scholardesk"
-database_id = "REPLACE_AFTER_wrangler_d1_create"
+database_id = "8ea11796-803b-45aa-9869-06e044d0526d"
 migrations_dir = "migrations"
 
 [vars]
@@ -25,6 +29,3 @@ GRACE_DAYS = "7"
 #   LICENSE_PRIVATE_KEY   PKCS#8 PEM (same key as before, so installed apps keep working)
 #   LICENSE_PUBLIC_KEY    SPKI PEM
 
-# Custom domain (rafid0.com must be on Cloudflare DNS). Cloudflare creates the DNS record and HTTPS certificate.
-workers_dev = false
-routes = [ { pattern = "school.rafid0.com", custom_domain = true } ]
