@@ -5,7 +5,7 @@ import { Card, Field, Modal, Switch, Tabs, Empty } from '../components/ui';
 import { CLASSES, SECTION_LETTERS, money } from '../lib/util';
 import { SUBJECT_GROUPS, applyImportedConfig, exportableConfig, saveSettings, type AppSettings, type Modules } from '../lib/config';
 import { PREVIEW_BUILD } from './LicenseGate';
-import { LICENSE_API } from '../lib/license';
+import { LICENSE_API, switchLicenseKey } from '../lib/license';
 import { changePin } from '../lib/pin';
 import { importDemoData } from '../lib/demo';
 import { previewPromotion, runPromotion, type PromotionPreview } from '../lib/promotion';
@@ -240,6 +240,7 @@ function SecurityTab() {
                 setBusy(false); setLic(await loadLicense());
                 setMsg(r.ok ? { ok: true, text: 'License verified online.' } : { ok: false, text: r.message || `Status: ${r.status ?? 'offline'}` });
               }}>{busy ? 'Checking…' : 'Verify & sync online now'}</button>
+              <ChangeKey />
             </>
           )}
         </div>
@@ -289,6 +290,33 @@ function DataTab({ dirty }: { dirty: boolean }) {
           <tbody>{preview?.map((p) => <tr key={p.classNo}><td>Class {p.classNo}</td><td>{p.total}</td><td className="text-ok">{p.passed}{p.classNo === 10 ? ' (graduate)' : ''}</td><td className="text-bad">{p.failed}</td><td className="text-due">{p.noResult}</td></tr>)}</tbody></table>
         <p className="mt-3 text-xs text-slate-500">Take a backup first. Fee defaults: {money(settings.defaultFees[1]?.monthly)}… are not changed automatically.</p>
       </Modal>
+    </div>
+  );
+}
+
+/** Use a different license key on this PC (for example change School → Coaching). */
+function ChangeKey() {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  if (!open) return <button className="btn-ghost mt-3 ml-2" onClick={() => setOpen(true)}>Change license key</button>;
+  return (
+    <div className="mt-4 space-y-2 rounded-lg border border-line p-4">
+      <div className="text-sm font-semibold">Change license key</div>
+      <p className="text-xs text-slate-500">Enter the new key from your software provider. A <b>COA-</b> key switches this PC to the Coaching software, an <b>SCH-</b> key to School. All data on this PC stays. If the new key cannot be used, the current one is kept.</p>
+      <input className="input font-mono uppercase tracking-wider" placeholder="SCH-2026-XXXX-XXXX" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} />
+      {msg && <p className={`rounded-lg px-3 py-2 text-sm ${msg.ok ? 'bg-emerald-50 text-ok' : 'bg-red-50 text-bad'}`}>{msg.text}</p>}
+      <div className="flex gap-2">
+        <button className="btn-ghost" onClick={() => { setOpen(false); setMsg(null); }}>Cancel</button>
+        <button className="btn-primary" disabled={busy || key.length < 18} onClick={async () => {
+          setBusy(true); setMsg(null);
+          const r = await switchLicenseKey(key);
+          setBusy(false);
+          if (r.ok || r.status === 'PENDING') { setMsg({ ok: true, text: 'License changed. Restarting…' }); setTimeout(() => window.location.reload(), 900); }
+          else setMsg({ ok: false, text: r.message ?? 'Could not change the key.' });
+        }}>{busy ? 'Checking…' : 'Use this key'}</button>
+      </div>
     </div>
   );
 }

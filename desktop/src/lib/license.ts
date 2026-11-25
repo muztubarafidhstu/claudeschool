@@ -239,3 +239,18 @@ export async function requestActivation(form: RegistrationForm): Promise<SyncRes
   await setConfig('registration', form);
   return syncOnline(body.license_key);
 }
+
+/**
+ * Switch this PC to a different license key (e.g. a School key → a Coaching key).
+ * The new key is checked with the server first; if it is not usable the current license is kept.
+ */
+export async function switchLicenseKey(newKey: string): Promise<SyncResult> {
+  const key = newKey.trim().toUpperCase();
+  if (!/^(SCH|COA)-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(key)) return { ok: false, message: 'License key format is SCH-2026-XXXX-XXXX (school) or COA-2026-XXXX-XXXX (coaching).' };
+  const prev = await loadLicense();
+  if (prev?.license_key === key) return syncOnline(key);
+  const r = await syncOnline(key);
+  if (r.ok || r.status === 'PENDING') return r;
+  if (prev) await saveLicense(prev); // keep the working license
+  return { ...r, message: r.message || `This key could not be used (${r.status ?? 'offline'}). Your current license was kept.` };
+}

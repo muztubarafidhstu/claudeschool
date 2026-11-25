@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { GraduationCap, KeyRound, Lock, RefreshCw, Wifi, Cpu, ShieldAlert, Send, Hourglass, School, LifeBuoy } from 'lucide-react';
-import { applyEmergencyCode, currentLockId, emergencyAvailable, evaluate, requestActivation, syncOnline, EMERGENCY_DAYS, LOCK_TEXT, type Evaluation, type RegistrationForm } from '../lib/license';
+import { applyEmergencyCode, currentLockId, emergencyAvailable, evaluate, requestActivation, switchLicenseKey, syncOnline, EMERGENCY_DAYS, LOCK_TEXT, type Evaluation, type RegistrationForm } from '../lib/license';
 import { getConfig } from '../lib/config';
 import { getMachineId } from '../lib/platform';
 
@@ -46,6 +46,27 @@ function LicensedGate({ children, onBanner }: { children: ReactNode; onBanner: (
   if (ev.reason === 'NEEDS_ACTIVATION') return <Activation onDone={refresh} />;
   if (ev.reason === 'PENDING') return <PendingScreen ev={ev} onRetry={refresh} />;
   return <LockScreen ev={ev} onRetry={refresh} />;
+}
+
+/** Lock screen: switch to a different license key (e.g. a new Coaching key). */
+function OtherKey({ onDone }: { onDone: () => Promise<Evaluation> }) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if (!open) return <button className="flex w-full items-center justify-center gap-2 text-sm font-medium text-slate-600 hover:text-brand" onClick={() => setOpen(true)}><KeyRound size={16} /> Use a different license key</button>;
+  return (
+    <form className="space-y-2 rounded-lg border border-line p-4" onSubmit={async (e) => {
+      e.preventDefault(); setBusy(true); setErr('');
+      const r = await switchLicenseKey(key);
+      setBusy(false);
+      if (r.ok || r.status === 'PENDING') await onDone(); else setErr(r.message ?? 'Could not use this key.');
+    }}>
+      <input className="input font-mono uppercase tracking-wider" placeholder="SCH-2026-XXXX-XXXX or COA-…" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} />
+      {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad">{err}</p>}
+      <button className="btn-ghost w-full" disabled={busy || key.length < 18}><KeyRound size={16} /> {busy ? 'Checking…' : 'Activate this key'}</button>
+    </form>
+  );
 }
 
 /** Lock ID + emergency code entry (owner generates the code in the web panel). */
@@ -245,6 +266,7 @@ function LockScreen({ ev, onRetry }: { ev: Evaluation; onRetry: () => Promise<Ev
           {msg && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad">{msg}</p>}
           <button className="btn-primary w-full py-3 text-base" onClick={verify} disabled={busy}><RefreshCw size={18} className={busy ? 'animate-spin' : ''} /> {busy ? 'Contacting license server…' : 'Verify Payment & Sync Online Now'}</button>
           <p className="text-center text-xs text-slate-400">Your school data is safe on this PC. It unlocks immediately after successful verification.</p>
+          <OtherKey onDone={onRetry} />
           <EmergencyBox ev={ev} onDone={onRetry} />
         </div>
       </div>

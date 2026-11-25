@@ -12,10 +12,10 @@ function Inner() {
   const router = useRouter();
   const [d, setD] = useState<{ school: SchoolRow; payments: any[]; heartbeats: any[] } | null>(null);
   const [pay, setPay] = useState({ amount_bdt: '', method: 'bKash', transaction_ref: '', periods: '1', extend_to: '', note: '' });
-  const [lic, setLic] = useState({ valid_until: '', price_bdt: '', max_students: '', payment_notice: '' });
+  const [lic, setLic] = useState({ product: 'SCHOOL', valid_until: '', price_bdt: '', max_students: '', payment_notice: '' });
   const load = useCallback(() => api(`/admin/schools/${id}`).then((r) => {
     setD(r);
-    setLic({ valid_until: r.school.valid_until, price_bdt: String(r.school.price_bdt), max_students: String(r.school.max_students), payment_notice: r.school.payment_notice ?? '' });
+    setLic({ product: r.school.product ?? 'SCHOOL', valid_until: r.school.valid_until, price_bdt: String(r.school.price_bdt), max_students: String(r.school.max_students), payment_notice: r.school.payment_notice ?? '' });
     setPay((p) => ({ ...p, amount_bdt: String(r.school.price_bdt) }));
   }), [id]);
   useEffect(() => { if (id) load(); }, [id, load]);
@@ -61,6 +61,15 @@ function Inner() {
 
         <form className="card space-y-3 p-5" onSubmit={(e) => { e.preventDefault(); act(() => api(`/admin/licenses/${s.license_id}`, { method: 'PATCH', body: JSON.stringify({ ...lic, payment_notice: lic.payment_notice || null }) })); }}>
           <h2 className="font-semibold">License settings</h2>
+          <div><label className="label">Product</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([['SCHOOL', 'School'], ['COACHING', 'Coaching centre']] as const).map(([v, l]) => (
+                <button type="button" key={v} onClick={() => setLic({ ...lic, product: v })}
+                  className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${lic.product === v ? 'border-[#0D9488] bg-teal-50 text-[#0F766E]' : 'border-slate-200 text-slate-600'}`}>{l}</button>
+              ))}
+            </div>
+            {lic.product !== (s.product ?? 'SCHOOL') && <p className="mt-1 text-xs text-[#F59E0B]">After saving, the school’s software switches to {lic.product === 'COACHING' ? 'Coaching' : 'School'} on its next online check (or when it presses “Verify & sync”).</p>}
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div><label className="label">Valid until</label><input className="input" type="date" value={lic.valid_until} onChange={(e) => setLic({ ...lic, valid_until: e.target.value })} /></div>
             <div><label className="label">Price (BDT)</label><input className="input" type="number" value={lic.price_bdt} onChange={(e) => setLic({ ...lic, price_bdt: e.target.value })} /></div>
