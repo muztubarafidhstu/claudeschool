@@ -6,14 +6,30 @@ import { applyImportedConfig, saveSettings } from '../lib/config';
 import { importDemoData } from '../lib/demo';
 import { restoreBackup } from '../lib/backup';
 import { pickTextFile } from '../lib/platform';
-import { loadLicense } from '../lib/license';
+import { loadLicense, type RegistrationForm } from '../lib/license';
+import { getConfig } from '../lib/config';
 import { useEffect } from 'react';
 
 export default function Onboarding() {
   const { settings, replaceSettings, toast, bump } = useApp();
   const [school, setSchool] = useState(settings.school);
   const [busy, setBusy] = useState('');
-  useEffect(() => { loadLicense().then((l) => l?.school_name && !school.name && setSchool((s) => ({ ...s, name: l.school_name! }))); }, []); // eslint-disable-line
+  useEffect(() => {
+    (async () => {
+      // Pre-fill from the activation request (or the licensed school name).
+      const reg = await getConfig<RegistrationForm | null>('registration', null);
+      const l = await loadLicense();
+      setSchool((s) => ({
+        ...s,
+        name: s.name || reg?.school_name || l?.school_name || '',
+        name_bn: s.name_bn || reg?.school_name_bn || '',
+        phone: s.phone || reg?.phone || '',
+        email: s.email || reg?.email || '',
+        address: s.address || [reg?.address, reg?.district].filter(Boolean).join(', '),
+        principal: s.principal || reg?.contact_person || '',
+      }));
+    })();
+  }, []);
 
   async function finish(patch = {}) {
     const next = { ...settings, ...patch, school: { ...school, ...((patch as any).school ?? {}) }, onboarded: true };

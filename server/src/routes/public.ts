@@ -5,7 +5,8 @@ import { pool, q } from '../lib/db.js';
 import { asyncH } from '../lib/auth.js';
 import { signGraceToken } from '../lib/tokens.js';
 import { config } from '../lib/config.js';
-import { todayUtc } from '../lib/dates.js';
+import { addPeriod, todayUtc } from '../lib/dates.js';
+import { generateLicenseKey } from '../lib/keys.js';
 
 export const publicRouter = Router();
 
@@ -19,7 +20,7 @@ const VerifyBody = z.object({
   local_utc_timestamp: z.number().int().nonnegative(),
 });
 
-type Status = 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH';
+type Status = 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH' | 'PENDING';
 
 async function paymentInstructions(override?: string | null) {
   if (override) return override;
@@ -87,6 +88,8 @@ publicRouter.post('/verify-license', limiter, asyncH(async (req, res) => {
     const notice =
       status === 'MACHINE_MISMATCH'
         ? 'This license is already activated on another computer. Contact your software provider to transfer it.'
+        : status === 'PENDING'
+          ? 'Your request has been received. The software unlocks automatically as soon as it is approved.'
         : status === 'INVALID'
           ? 'License key not recognised. Please check the key or contact your software provider.'
           : status === 'ACTIVE'
@@ -115,3 +118,53 @@ publicRouter.post('/verify-license', limiter, asyncH(async (req, res) => {
 /** Public key so you can rotate / audit what the desktop builds embed. */
 publicRouter.get('/public-key', (_req, res) => res.type('text/plain').send(config.publicKeyPem));
 publicRouter.get('/health', (_req, res) => res.json({ ok: true, server_utc_timestamp: Math.floor(Date.now() / 1000) }));
+
+// ---------------------------------------------------------------------------------------------
+// Self-registration from a freshly installed desktop app. Creates the school + a PENDING license
+// bound to this PC. The owner approves (or rejects) it in the panel; the app then unlocks itself.
+const registerLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false,
+  message: { error: 'Too many requests from this network. Please try again later.' } });
+
+const RegisterBody = z.object({
+  machine_id: z.string().trim().min(6).max(80),
+  app_version: z.string().max(32).default('0.0.0'),
+  school_name: z.string().trim().min(2).max(160),
+  school_name_bn: z.string().trim().max(160).optional().nullable(),
+  contact_person: z.string().trim().min(2).max(120),
+  phone: z.string().trim().regex(/^01\d{9}$/, 'Mobile must be 11 digits starting with 01'),
+  email: z.string().trim().max(160).optional().nullable(),
+  address: z.string().trim().max(300).optional().nullable(),
+  district: z.string().trim().max(80).optional().nullable(),
+  students_estimate: z.number().int().min(0).max(100000).optional().nullable(),
+  requested_plan: z.enum(['TRIAL', 'MONTHLY', 'YEARLY']).default('TRIAL'),
+});
+
+publicRouter.post('/register', registerLimiter, asyncH(async (req, res) => {
+  const parsed = RegisterBody.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid form' });
+  const b = parsed.data;
+  // One request per PC: return the existing license if this machine already registered.
+  const [existing] = await q(`SELECT l.license_key, l.status FROM licenses l WHERE l.machine_id = $1 ORDER BY l.created_at DESC LIMIT 1`, [b.machine_id]);
+  if (existing) return res.json({ license_key: existing.license_key, status: existing.status, existing: true });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [s] } = await client.query(
+      `INSERT INTO schools(name, name_bn, contact_person, phone, email, address, district, students_estimate, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'Registered from the desktop app') RETURNING id`,
+      [b.school_name, b.school_name_bn, b.contact_person, b.phone, b.email, b.address, b.district, b.students_estimate]);
+    let key = generateLicenseKey();
+    for (let i = 0; i < 5; i++) { const r = await client.query('SELECT 1 FROM licenses WHERE license_key=$1', [key]); if (!r.rowCount) break; key = generateLicenseKey(); }
+    await client.query(
+      `INSERT INTO licenses(school_id, license_key, status, billing_cycle, valid_until, machine_id, source, requested_at, requested_plan, last_app_version)
+       VALUES ($1,$2,'PENDING','TRIAL',$3,$4,'app',now(),$5,$6)`,
+      [s.id, key, addPeriod(todayUtc(), 'TRIAL'), b.machine_id, b.requested_plan, b.app_version]);
+    await client.query('COMMIT');
+    res.status(201).json({ license_key: key, status: 'PENDING' });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}));

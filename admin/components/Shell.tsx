@@ -2,11 +2,12 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, School, Receipt, Settings, LogOut, GraduationCap, Menu } from 'lucide-react';
-import { getToken, setToken } from '@/lib/api';
+import { LayoutDashboard, School, Receipt, Settings, LogOut, GraduationCap, Menu, BellRing } from 'lucide-react';
+import { api, getToken, setToken } from '@/lib/api';
 
 const NAV = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/pending/', label: 'Pending requests', icon: BellRing },
   { href: '/schools/', label: 'Schools & Licenses', icon: School },
   { href: '/payments/', label: 'Payments', icon: Receipt },
   { href: '/settings/', label: 'Settings', icon: Settings },
@@ -18,6 +19,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const isLogin = path.startsWith('/login');
+  const [pending, setPending] = useState(0);
+  // New installations show up here within 30 seconds.
+  useEffect(() => {
+    if (isLogin || !ready) return;
+    const load = () => api<unknown[]>('/admin/pending').then((r) => setPending(r.length)).catch(() => {});
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [isLogin, ready, path]);
 
   useEffect(() => {
     if (!isLogin && !getToken()) router.replace('/login/');
@@ -30,7 +40,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen md:flex">
       <header className="flex items-center justify-between bg-[#0F172A] px-4 py-3 text-white md:hidden">
-        <span className="flex items-center gap-2 font-semibold"><GraduationCap size={20} className="text-teal-400" /> ScholarDesk Admin</span>
+        <span className="flex items-center gap-2 font-semibold"><GraduationCap size={20} className="text-teal-400" /> ScholarDesk Admin
+          {pending > 0 && <Link href="/pending/" className="rounded-full bg-[#EF4444] px-2 py-0.5 text-xs font-bold">{pending} new</Link>}</span>
         <button onClick={() => setOpen(!open)} aria-label="Menu"><Menu /></button>
       </header>
       <aside className={`${open ? 'block' : 'hidden'} w-full bg-[#0F172A] text-white md:block md:min-h-screen md:w-64 md:shrink-0`}>
@@ -44,6 +55,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <Link key={href} href={href} onClick={() => setOpen(false)}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${active ? 'bg-[#0D9488] text-white' : 'text-slate-300 hover:bg-white/5'}`}>
                 <Icon size={18} /> {label}
+                {href === '/pending/' && pending > 0 && <span className="ml-auto rounded-full bg-[#EF4444] px-2 py-0.5 text-xs font-bold text-white">{pending}</span>}
               </Link>
             );
           })}

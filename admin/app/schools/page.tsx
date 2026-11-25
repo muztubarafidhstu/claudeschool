@@ -56,7 +56,9 @@ function SchoolsInner() {
                   <td className="p-3">{r.last_student_count ?? '—'} / {r.max_students}</td>
                   <td className="p-3 text-xs">{fmtDate(r.last_seen_at)}<div className="text-slate-400">{r.machine_id ?? 'not activated'}</div></td>
                   <td className="p-3 text-right">
-                    {st === 'ACTIVE'
+                    {st === 'PENDING'
+                      ? <Link href="/pending/" className="btn-primary">Review request</Link>
+                      : st === 'ACTIVE'
                       ? <button className="btn-danger" onClick={() => toggle(r)}><PowerOff size={14} /> Turn OFF</button>
                       : <button className="btn-primary" onClick={() => toggle(r)}><Power size={14} /> Activate</button>}
                   </td>

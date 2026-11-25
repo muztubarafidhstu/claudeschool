@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { GraduationCap, KeyRound, Lock, RefreshCw, Wifi, Cpu, ShieldAlert } from 'lucide-react';
-import { evaluate, syncOnline, LOCK_TEXT, type Evaluation } from '../lib/license';
+import { GraduationCap, KeyRound, Lock, RefreshCw, Wifi, Cpu, ShieldAlert, Send, Hourglass, School } from 'lucide-react';
+import { evaluate, requestActivation, syncOnline, LOCK_TEXT, type Evaluation, type RegistrationForm } from '../lib/license';
+import { getConfig } from '../lib/config';
 import { getMachineId } from '../lib/platform';
 
 const HEARTBEAT_MS = 15 * 60_000;  // online heartbeat (owner's ON/OFF switch takes effect within 15 min)
@@ -43,6 +44,7 @@ function LicensedGate({ children, onBanner }: { children: ReactNode; onBanner: (
   if (!ev) return <Splash />;
   if (!ev.locked) return <>{children}</>;
   if (ev.reason === 'NEEDS_ACTIVATION') return <Activation onDone={refresh} />;
+  if (ev.reason === 'PENDING') return <PendingScreen ev={ev} onRetry={refresh} />;
   return <LockScreen ev={ev} onRetry={refresh} />;
 }
 
@@ -62,28 +64,103 @@ function Shell({ children }: { children: ReactNode }) {
 }
 
 function Activation({ onDone }: { onDone: () => Promise<Evaluation> }) {
+  const [mode, setMode] = useState<'request' | 'key'>('request');
+  const [mid, setMid] = useState('');
+  useEffect(() => { getMachineId().then(setMid); }, []);
+  return (
+    <Shell>
+      <div className="card overflow-hidden">
+        <div className="grid grid-cols-2 border-b border-line text-sm font-semibold">
+          <button className={`flex items-center justify-center gap-2 py-3 ${mode === 'request' ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-50'}`} onClick={() => setMode('request')}><School size={16} /> New school — request activation</button>
+          <button className={`flex items-center justify-center gap-2 py-3 ${mode === 'key' ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-50'}`} onClick={() => setMode('key')}><KeyRound size={16} /> I have a license key</button>
+        </div>
+        {mode === 'request' ? <RequestForm onDone={onDone} /> : <KeyForm onDone={onDone} />}
+        <div className="flex items-center gap-2 border-t border-line bg-slate-50 px-6 py-2 text-xs text-slate-500"><Cpu size={14} /> This PC’s hardware ID: <b className="font-mono text-slate-700">{mid}</b></div>
+      </div>
+    </Shell>
+  );
+}
+
+function KeyForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [mid, setMid] = useState('');
-  useEffect(() => { getMachineId().then(setMid); }, []);
   async function activate(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr('');
     const r = await syncOnline(key);
     setBusy(false);
-    if (r.ok) await onDone(); else setErr(r.message || `Activation failed (${r.status ?? 'network'})`);
+    if (r.ok || r.status === 'PENDING') await onDone(); else setErr(r.message || `Activation failed (${r.status ?? 'network'})`);
   }
   return (
+    <form onSubmit={activate} className="space-y-4 p-6">
+      <p className="text-sm text-slate-500">{LOCK_TEXT.NEEDS_ACTIVATION.body} An internet connection is required once for activation.</p>
+      <label className="block"><span className="label">School License Key</span>
+        <input className="input font-mono text-lg uppercase tracking-wider" placeholder="SCH-2026-XXXX-XXXX" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} required autoFocus /></label>
+      {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad">{err}</p>}
+      <button className="btn-primary w-full py-3" disabled={busy}><KeyRound size={18} /> {busy ? 'Verifying with license server…' : 'Activate License'}</button>
+    </form>
+  );
+}
+
+function RequestForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
+  const [f, setF] = useState<RegistrationForm>({ school_name: '', school_name_bn: '', contact_person: '', phone: '', email: '', address: '', district: '', students_estimate: null, requested_plan: 'TRIAL' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const set = <K extends keyof RegistrationForm>(k: K, v: RegistrationForm[K]) => setF((p) => ({ ...p, [k]: v }));
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!/^01\d{9}$/.test(f.phone)) return setErr('Mobile number must be 11 digits starting with 01.');
+    setBusy(true); setErr('');
+    const r = await requestActivation(f);
+    setBusy(false);
+    if (r.ok || r.status === 'PENDING') await onDone(); else setErr(r.message || 'Request failed');
+  }
+  return (
+    <form onSubmit={submit} className="grid gap-3 p-6 sm:grid-cols-2">
+      <p className="text-sm text-slate-500 sm:col-span-2">Fill in your school’s details. Your request goes to the software provider; the software unlocks automatically when it is approved.</p>
+      <label className="block sm:col-span-2"><span className="label">School name (English) *</span><input className="input" value={f.school_name} onChange={(e) => set('school_name', e.target.value)} required minLength={2} autoFocus /></label>
+      <label className="block sm:col-span-2"><span className="label">বিদ্যালয়ের নাম (বাংলা)</span><input className="input bn" value={f.school_name_bn} onChange={(e) => set('school_name_bn', e.target.value)} /></label>
+      <label className="block"><span className="label">Contact person *</span><input className="input" placeholder="Principal / owner" value={f.contact_person} onChange={(e) => set('contact_person', e.target.value)} required minLength={2} /></label>
+      <label className="block"><span className="label">Mobile *</span><input className="input" inputMode="tel" placeholder="01XXXXXXXXX" value={f.phone} onChange={(e) => set('phone', e.target.value.replace(/\D/g, '').slice(0, 11))} required /></label>
+      <label className="block"><span className="label">Email</span><input className="input" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} /></label>
+      <label className="block"><span className="label">District</span><input className="input" value={f.district} onChange={(e) => set('district', e.target.value)} /></label>
+      <label className="block sm:col-span-2"><span className="label">Address</span><input className="input" value={f.address} onChange={(e) => set('address', e.target.value)} /></label>
+      <label className="block"><span className="label">Approx. students</span><input className="input" type="number" min={0} value={f.students_estimate ?? ''} onChange={(e) => set('students_estimate', e.target.value ? Number(e.target.value) : null)} /></label>
+      <label className="block"><span className="label">Plan wanted</span>
+        <select className="input" value={f.requested_plan} onChange={(e) => set('requested_plan', e.target.value as RegistrationForm['requested_plan'])}>
+          <option value="TRIAL">Free trial</option><option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option>
+        </select></label>
+      {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad sm:col-span-2">{err}</p>}
+      <button className="btn-primary py-3 sm:col-span-2" disabled={busy}><Send size={18} /> {busy ? 'Sending request…' : 'Send activation request'}</button>
+    </form>
+  );
+}
+
+function PendingScreen({ ev, onRetry }: { ev: Evaluation; onRetry: () => Promise<Evaluation> }) {
+  const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState<Date | null>(null);
+  const [reg, setReg] = useState<RegistrationForm | null>(null);
+  const check = useCallback(async () => { setBusy(true); await syncOnline(); await onRetry(); setChecked(new Date()); setBusy(false); }, [onRetry]);
+  useEffect(() => { getConfig<RegistrationForm | null>('registration', null).then(setReg); }, []);
+  useEffect(() => { const t = setInterval(check, 60_000); return () => clearInterval(t); }, [check]); // auto-unlock after approval
+  const st = ev.state!;
+  return (
     <Shell>
-      <form onSubmit={activate} className="card space-y-4 p-7">
-        <div><h1 className="text-xl font-bold">Activate this PC</h1><p className="text-sm text-slate-500">{LOCK_TEXT.NEEDS_ACTIVATION.body} An internet connection is required once for activation.</p></div>
-        <label className="block"><span className="label">School License Key</span>
-          <input className="input font-mono text-lg uppercase tracking-wider" placeholder="SCH-2026-XXXX-XXXX" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} required autoFocus /></label>
-        <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500"><Cpu size={14} /> This PC’s hardware ID: <b className="font-mono text-slate-700">{mid}</b></div>
-        {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad">{err}</p>}
-        <button className="btn-primary w-full py-3" disabled={busy}><KeyRound size={18} /> {busy ? 'Verifying with license server…' : 'Activate License'}</button>
-      </form>
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-3 bg-blue-600 px-6 py-4 text-white"><Hourglass /><h1 className="text-lg font-bold">{LOCK_TEXT.PENDING.title}</h1></div>
+        <div className="space-y-4 p-6">
+          <p className="text-sm text-slate-600">{LOCK_TEXT.PENDING.body}</p>
+          <div className="space-y-1 rounded-lg bg-slate-50 p-4 text-sm">
+            <div><span className="text-slate-500">School:</span> <b>{st.school_name ?? reg?.school_name}</b></div>
+            {reg && <div><span className="text-slate-500">Contact:</span> {reg.contact_person} · {reg.phone}</div>}
+            <div className="text-xs text-slate-500">Request ID: <span className="font-mono">{st.license_key}</span> · PC: <span className="font-mono">{st.machine_id}</span></div>
+          </div>
+          {st.payment_instructions && <div className="rounded-lg border border-line p-4"><div className="label">Payment / contact</div><pre className="whitespace-pre-wrap font-sans text-sm">{st.payment_instructions}</pre></div>}
+          <button className="btn-primary w-full py-3" onClick={check} disabled={busy}><RefreshCw size={18} className={busy ? 'animate-spin' : ''} /> {busy ? 'Checking…' : 'Check approval now'}</button>
+          <p className="text-center text-xs text-slate-400">Checks automatically every minute{checked ? ` · last checked ${checked.toLocaleTimeString()}` : ''}.</p>
+        </div>
+      </div>
     </Shell>
   );
 }

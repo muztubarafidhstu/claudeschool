@@ -18,7 +18,7 @@ export const APP_VERSION = '1.0.0';
 export const GRACE_SECONDS = 7 * 86400;
 const CLOCK_TOLERANCE = 10 * 60; // 10 minutes of normal drift allowed
 
-export type ServerStatus = 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH';
+export type ServerStatus = 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH' | 'PENDING';
 export interface LicenseState {
   license_key: string;
   machine_id: string;
@@ -31,7 +31,7 @@ export interface LicenseState {
   payment_notice: string;
   payment_instructions: string;
 }
-export type LockReason = 'NEEDS_ACTIVATION' | 'CLOCK_TAMPER' | 'OFFLINE_TOO_LONG' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH';
+export type LockReason = 'NEEDS_ACTIVATION' | 'PENDING' | 'CLOCK_TAMPER' | 'OFFLINE_TOO_LONG' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH';
 export interface Evaluation {
   locked: boolean;
   reason?: LockReason;
@@ -127,6 +127,7 @@ export async function syncOnline(licenseKey?: string): Promise<SyncResult> {
 
 export const LOCK_TEXT: Record<LockReason, { title: string; body: string }> = {
   NEEDS_ACTIVATION: { title: 'Activate ScholarDesk Pro', body: 'Enter the School License Key you received from your software provider.' },
+  PENDING: { title: 'Waiting for Approval', body: 'Your activation request has been sent. The software unlocks automatically as soon as it is approved — keep this PC connected to the internet.' },
   SUSPENDED: { title: 'Subscription Payment Required', body: 'Your ScholarDesk Pro subscription has been turned off by the provider. Please complete the payment below, then verify online.' },
   EXPIRED: { title: 'Subscription Expired', body: 'Your subscription period has ended. Please renew using the payment instructions below, then verify online.' },
   OFFLINE_TOO_LONG: { title: 'Online Verification Required', body: 'ScholarDesk Pro must connect to the internet at least once every 7 days. Connect this PC to the internet and press the button below.' },
@@ -134,3 +135,26 @@ export const LOCK_TEXT: Record<LockReason, { title: string; body: string }> = {
   INVALID: { title: 'License Not Recognised', body: 'This license key is no longer valid. Contact your software provider.' },
   MACHINE_MISMATCH: { title: 'License Bound to Another PC', body: 'This license is activated on a different computer. Ask your provider to reset the PC binding.' },
 };
+
+export interface RegistrationForm {
+  school_name: string; school_name_bn?: string; contact_person: string; phone: string; email?: string;
+  address?: string; district?: string; students_estimate?: number | null; requested_plan: 'TRIAL' | 'MONTHLY' | 'YEARLY';
+}
+
+/** First-install self-registration: the school appears in the owner's panel under "Pending requests". */
+export async function requestActivation(form: RegistrationForm): Promise<SyncResult> {
+  const machine_id = await getMachineId();
+  let res: Response;
+  try {
+    res = await httpFetch(`${LICENSE_API}/register`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...form, machine_id, app_version: APP_VERSION }),
+    });
+  } catch {
+    return { ok: false, message: 'Cannot reach the server. Check the internet connection and try again.' };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.license_key) return { ok: false, message: body?.error ?? `Request failed (${res.status})` };
+  await setConfig('registration', form);
+  return syncOnline(body.license_key);
+}

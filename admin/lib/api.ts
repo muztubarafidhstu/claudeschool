@@ -32,7 +32,7 @@ export const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleString('e
 export type SchoolRow = {
   id: string; name: string; name_bn: string | null; contact_person: string | null; phone: string | null; email: string | null;
   address: string | null; district: string | null; notes: string | null;
-  license_id: string; license_key: string; status: 'ACTIVE' | 'SUSPENDED' | 'EXPIRED'; billing_cycle: string; price_bdt: number;
+  license_id: string; license_key: string; status: 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'PENDING'; source?: string; requested_at?: string | null; requested_plan?: string | null; students_estimate?: number | null; billing_cycle: string; price_bdt: number;
   valid_until: string; max_students: number; machine_id: string | null; last_seen_at: string | null; last_app_version: string | null;
   last_student_count: number | null; suspend_reason: string | null; payment_notice: string | null; is_past_due: boolean;
 };

@@ -39,7 +39,8 @@ adminRouter.get('/stats', asyncH(async (_req, res) => {
     SELECT COUNT(*)::int AS total,
            COUNT(*) FILTER (WHERE status='ACTIVE' AND valid_until >= CURRENT_DATE)::int AS active,
            COUNT(*) FILTER (WHERE status='SUSPENDED')::int AS suspended,
-           COUNT(*) FILTER (WHERE status='EXPIRED' OR valid_until < CURRENT_DATE)::int AS expired,
+           COUNT(*) FILTER (WHERE status='PENDING')::int AS pending,
+           COUNT(*) FILTER (WHERE status='EXPIRED' OR (status='ACTIVE' AND valid_until < CURRENT_DATE))::int AS expired,
            COUNT(*) FILTER (WHERE status='ACTIVE' AND valid_until BETWEEN CURRENT_DATE AND CURRENT_DATE + 15)::int AS expiring_soon,
            COUNT(*) FILTER (WHERE last_seen_at > now() - interval '7 days')::int AS online_7d,
            COALESCE(SUM(last_student_count),0)::int AS students
@@ -56,10 +57,32 @@ adminRouter.get('/stats', asyncH(async (_req, res) => {
 
 // ---------- Schools + licenses ----------
 const LIST_SQL = `
-  SELECT s.*, l.id AS license_id, l.license_key, l.status, l.billing_cycle, l.price_bdt, l.valid_until, l.max_students,
+  SELECT s.*, l.id AS license_id, l.license_key, l.status, l.source, l.requested_at, l.requested_plan, l.billing_cycle, l.price_bdt, l.valid_until, l.max_students,
          l.machine_id, l.last_seen_at, l.last_app_version, l.last_student_count, l.suspend_reason, l.payment_notice,
          (l.valid_until < CURRENT_DATE) AS is_past_due
     FROM schools s LEFT JOIN licenses l ON l.school_id = s.id`;
+
+adminRouter.get('/pending', asyncH(async (_req, res) => {
+  res.json(await q(`${LIST_SQL} WHERE l.status = 'PENDING' ORDER BY l.requested_at ASC NULLS LAST`));
+}));
+
+/** Approve a self-registered school: choose the plan, then it becomes ACTIVE. */
+adminRouter.post('/licenses/:id/approve', asyncH(async (req, res) => {
+  const b = z.object({
+    billing_cycle: z.enum(['MONTHLY', 'YEARLY', 'LIFETIME', 'TRIAL']).default('TRIAL'),
+    price_bdt: z.coerce.number().min(0).default(0),
+    valid_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    max_students: z.coerce.number().int().min(1).max(100000).default(2000),
+  }).parse(req.body);
+  const validUntil = b.valid_until ?? addPeriod(todayUtc(), b.billing_cycle);
+  const [row] = await q(
+    `UPDATE licenses SET status='ACTIVE', billing_cycle=$2, price_bdt=$3, valid_until=$4, max_students=$5, suspend_reason=NULL,
+            activated_at=COALESCE(activated_at, now()), updated_at=now() WHERE id=$1 RETURNING *`,
+    [req.params.id, b.billing_cycle, b.price_bdt, validUntil, b.max_students]);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  await audit('APPROVE', 'license', req.params.id, b);
+  res.json(row);
+}));
 
 adminRouter.get('/schools', asyncH(async (req, res) => {
   const search = String(req.query.q ?? '').trim();

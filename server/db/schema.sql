@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS licenses (
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_licenses_school ON licenses(school_id);
+
+-- v2: self-registration from the desktop app (owner approves in the panel)
+ALTER TYPE license_status ADD VALUE IF NOT EXISTS 'PENDING';
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'admin';   -- 'admin' | 'app'
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ;
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS requested_plan TEXT;
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS students_estimate INTEGER;
 CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status, valid_until);
 
 CREATE TABLE IF NOT EXISTS payment_logs (
