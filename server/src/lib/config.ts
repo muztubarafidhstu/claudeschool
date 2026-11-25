@@ -2,7 +2,12 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const b64 = (name: string) => (process.env[name] ? Buffer.from(process.env[name]!, 'base64').toString('utf8') : undefined);
+
 function readPem(inlineVar: string, pathVar: string): string {
+  // *_B64 variants avoid quoting problems in docker .env files.
+  const fromB64 = b64(inlineVar.replace(/_PEM$/, '_B64'));
+  if (fromB64) return fromB64;
   const inline = process.env[inlineVar];
   if (inline) return inline.replace(/\\n/g, '\n');
   const p = process.env[pathVar];
@@ -22,7 +27,8 @@ export const config = {
   databaseSsl: process.env.DATABASE_SSL === 'true',
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   adminEmail: (process.env.ADMIN_EMAIL ?? 'owner').toLowerCase(),
-  adminPasswordHash: required('ADMIN_PASSWORD_HASH'),
+  // bcrypt hashes contain "$", so docker .env files use the base64 form ADMIN_PASSWORD_HASH_B64.
+  adminPasswordHash: b64('ADMIN_PASSWORD_HASH_B64') ?? required('ADMIN_PASSWORD_HASH'),
   adminJwtSecret: new TextEncoder().encode(required('ADMIN_JWT_SECRET')),
   privateKeyPem: readPem('LICENSE_PRIVATE_KEY_PEM', 'LICENSE_PRIVATE_KEY_PATH'),
   publicKeyPem: readPem('LICENSE_PUBLIC_KEY_PEM', 'LICENSE_PUBLIC_KEY_PATH'),

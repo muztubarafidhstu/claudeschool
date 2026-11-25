@@ -1,0 +1,48 @@
+# ScholarDesk Pro on the existing rafid5.com VPS.
+# Started by deploy/vps/install.sh — do not run by hand unless you know the variables below.
+#   DATA_DIR       /opt/scholardesk-data (holds .env, database, backups, releases)
+#   CADDY_NETWORK  docker network of the existing Caddy container (so Caddy can reach "scholardesk-app")
+name: scholardesk
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: scholardesk-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scholardesk
+      POSTGRES_DB: scholardesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD}
+    volumes:
+      - ${DATA_DIR}/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholardesk -d scholardesk"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: scholardesk-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: ${DATA_DIR}/.env
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgresql://scholardesk:${POSTGRES_PASSWORD}@db:5432/scholardesk
+      DATABASE_SSL: "false"
+      RELEASES_DIR: /app/server/releases
+    volumes:
+      - ${DATA_DIR}/releases:/app/server/releases
+    expose:
+      - "8080"
+    networks:
+      - default
+      - edge
+
+networks:
+  edge:
+    external: true
+    name: ${CADDY_NETWORK:?missing CADDY_NETWORK}
