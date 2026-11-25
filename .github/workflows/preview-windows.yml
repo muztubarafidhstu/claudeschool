@@ -1,12 +1,12 @@
 # Builds an unsigned Windows installer. Download it from the run's "Artifacts" section.
 #  * Automatic runs (push) and "preview" runs: license checks disabled (VITE_PREVIEW_BUILD=1) — for trying the app.
-#  * Manual run with mode = "licensed": the real customer build, activated & controlled from https://scool.rafid5.com
+#  * Manual run with mode = "licensed": the real customer build, activated & controlled from https://school.rafid0.com
 name: Windows installer
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview = no license (testing) · licensed = real customer build (needs scool.rafid5.com online)'
+        description: 'preview = no license (testing) · licensed = real customer build (needs school.rafid0.com online)'
         type: choice
         options: [preview, licensed]
         default: preview
@@ -30,7 +30,7 @@ jobs:
       - name: Build installer
         env:
           VITE_PREVIEW_BUILD: ${{ inputs.mode == 'licensed' && '0' || '1' }}
-          VITE_LICENSE_API: https://scool.rafid5.com/api/v1
+          VITE_LICENSE_API: https://school.rafid0.com/api/v1
         run: npx tauri build --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":false}}'
         shell: bash
       - uses: actions/upload-artifact@v4

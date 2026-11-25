@@ -1,6 +1,6 @@
 import { isTauri } from './platform';
 
-/** Tauri auto-updater: checks https://scool.rafid5.com/api/v1/updates/{{target}}/{{arch}}/{{current_version}}. */
+/** Tauri auto-updater: checks https://school.rafid0.com/api/v1/updates/{{target}}/{{arch}}/{{current_version}}. */
 export async function checkForUpdates() {
   if (!isTauri || import.meta.env.DEV) return;
   try {

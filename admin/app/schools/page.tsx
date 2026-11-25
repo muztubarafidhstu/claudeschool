@@ -3,16 +3,17 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Search, Power, PowerOff, Copy, X } from 'lucide-react';
-import { api, effectiveStatus, fmtBdt, fmtDate, type SchoolRow } from '@/lib/api';
+import { api, effectiveStatus, fmtBdt, fmtDate, ProductTag, type SchoolRow } from '@/lib/api';
 import StatusBadge from '@/components/StatusBadge';
 
 function SchoolsInner() {
   const params = useSearchParams();
   const [rows, setRows] = useState<SchoolRow[]>([]);
   const [q, setQ] = useState('');
+  const [product, setProduct] = useState<'' | 'SCHOOL' | 'COACHING'>('');
   const [showNew, setShowNew] = useState(params.get('new') === '1');
   const [created, setCreated] = useState<string | null>(null);
-  const load = useCallback(() => api<SchoolRow[]>(`/admin/schools?q=${encodeURIComponent(q)}`).then(setRows), [q]);
+  const load = useCallback(() => api<SchoolRow[]>(`/admin/schools?q=${encodeURIComponent(q)}&product=${product}`).then(setRows), [q, product]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
   async function toggle(r: SchoolRow) {
@@ -28,6 +29,11 @@ function SchoolsInner() {
         <h1 className="text-2xl font-bold">Schools & Licenses</h1>
         <button className="btn-primary" onClick={() => setShowNew(true)}>+ New School License</button>
       </div>
+      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+        {([['', 'All'], ['SCHOOL', 'Schools'], ['COACHING', 'Coaching centres']] as const).map(([v, l]) => (
+          <button key={v} onClick={() => setProduct(v)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${product === v ? 'bg-[#0D9488] text-white' : 'text-slate-600 hover:bg-slate-50'}`}>{l}</button>
+        ))}
+      </div>
       <div className="relative max-w-md">
         <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
         <input className="input pl-9" placeholder="Search school, phone or license key…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -41,7 +47,7 @@ function SchoolsInner() {
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-            <tr><th className="p-3">School</th><th className="p-3">License key</th><th className="p-3">Status</th><th className="p-3">Valid until</th><th className="p-3">Plan</th><th className="p-3">Students</th><th className="p-3">Last online</th><th className="p-3 text-right">Remote control</th></tr>
+            <tr><th className="p-3">School</th><th className="p-3">Product</th><th className="p-3">License key</th><th className="p-3">Status</th><th className="p-3">Valid until</th><th className="p-3">Plan</th><th className="p-3">Students</th><th className="p-3">Last online</th><th className="p-3 text-right">Remote control</th></tr>
           </thead>
           <tbody>
             {rows.map((r) => {
@@ -49,6 +55,7 @@ function SchoolsInner() {
               return (
                 <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                   <td className="p-3"><Link href={`/schools/view/?id=${r.id}`} className="font-semibold text-[#0D9488] hover:underline">{r.name}</Link><div className="text-xs text-slate-500">{r.phone}</div></td>
+                  <td className="p-3"><ProductTag product={r.product} /></td>
                   <td className="p-3 font-mono text-xs">{r.license_key}</td>
                   <td className="p-3"><StatusBadge status={st} /></td>
                   <td className="p-3">{r.valid_until}</td>
@@ -65,7 +72,7 @@ function SchoolsInner() {
                 </tr>
               );
             })}
-            {!rows.length && <tr><td colSpan={8} className="p-6 text-center text-slate-500">No schools yet.</td></tr>}
+            {!rows.length && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No schools yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -75,7 +82,7 @@ function SchoolsInner() {
 }
 
 function NewSchoolModal({ onClose, onCreated }: { onClose: () => void; onCreated: (key: string) => void }) {
-  const [f, setF] = useState({ name: '', name_bn: '', contact_person: '', phone: '', email: '', address: '', district: '', billing_cycle: 'YEARLY', price_bdt: '12000', valid_until: '', max_students: '2000' });
+  const [f, setF] = useState({ product: 'SCHOOL', name: '', name_bn: '', contact_person: '', phone: '', email: '', address: '', district: '', billing_cycle: 'YEARLY', price_bdt: '12000', valid_until: '', max_students: '2000' });
   const [err, setErr] = useState('');
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   async function save(e: React.FormEvent) {
@@ -89,9 +96,11 @@ function NewSchoolModal({ onClose, onCreated }: { onClose: () => void; onCreated
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
       <form onSubmit={save} className="card mt-10 w-full max-w-2xl space-y-4 p-6">
-        <div className="flex items-center justify-between"><h2 className="text-lg font-bold">New school & license key</h2><button type="button" onClick={onClose}><X /></button></div>
+        <div className="flex items-center justify-between"><h2 className="text-lg font-bold">New license key</h2><button type="button" onClick={onClose}><X /></button></div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2"><label className="label">School name *</label><input className="input" value={f.name} onChange={set('name')} required /></div>
+          <div className="sm:col-span-2"><label className="label">Product</label>
+            <select className="input" value={f.product} onChange={set('product')}><option value="SCHOOL">School (ScholarDesk Pro)</option><option value="COACHING">Coaching centre</option></select></div>
+          <div className="sm:col-span-2"><label className="label">School / coaching name *</label><input className="input" value={f.name} onChange={set('name')} required /></div>
           <div><label className="label">Name (Bangla)</label><input className="input" value={f.name_bn} onChange={set('name_bn')} /></div>
           <div><label className="label">Contact person</label><input className="input" value={f.contact_person} onChange={set('contact_person')} /></div>
           <div><label className="label">Phone</label><input className="input" value={f.phone} onChange={set('phone')} /></div>

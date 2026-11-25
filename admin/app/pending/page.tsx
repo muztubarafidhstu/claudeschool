@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, Phone, MapPin, Users, Monitor, Clock, X } from 'lucide-react';
-import { api, fmtBdt, fmtDate, type SchoolRow } from '@/lib/api';
+import { api, fmtBdt, fmtDate, ProductTag, type SchoolRow } from '@/lib/api';
 
 const PLANS = [
   { value: 'TRIAL', label: 'Free trial (14 days)', price: 0 },
@@ -39,7 +39,7 @@ export default function Pending() {
                 {r.name_bn && <div className="text-slate-600">{r.name_bn}</div>}
                 <div className="mt-1 flex items-center gap-1 text-xs text-slate-500"><Clock size={12} /> Requested {fmtDate(r.requested_at)}</div>
               </div>
-              <span className="badge bg-blue-50 text-blue-600">Wants: {r.requested_plan ?? 'TRIAL'}</span>
+              <div className="flex flex-col items-end gap-1"><ProductTag product={r.product} /><span className="badge bg-blue-50 text-blue-600">Wants: {r.requested_plan ?? 'TRIAL'}</span></div>
             </div>
             <div className="grid gap-2 p-4 text-sm sm:grid-cols-2">
               <div><span className="text-slate-500">Contact:</span> <b>{r.contact_person ?? '—'}</b></div>

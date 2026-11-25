@@ -3,7 +3,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Power, PowerOff, RotateCcw, KeyRound, Trash2 } from 'lucide-react';
-import { api, effectiveStatus, fmtBdt, fmtDate, type SchoolRow } from '@/lib/api';
+import { api, effectiveStatus, fmtBdt, fmtDate, ProductTag, type SchoolRow } from '@/lib/api';
 import StatusBadge from '@/components/StatusBadge';
 
 function Inner() {
@@ -28,7 +28,7 @@ function Inner() {
       <Link href="/schools/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft size={16} /> All schools</Link>
       <div className="card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
-          <h1 className="text-2xl font-bold">{s.name} <StatusBadge status={st} /></h1>
+          <h1 className="text-2xl font-bold">{s.name} <StatusBadge status={st} /> <ProductTag product={s.product} /></h1>
           <p className="text-sm text-slate-500">{[s.contact_person, s.phone, s.email, s.district].filter(Boolean).join(' · ')}</p>
           <p className="mt-2 font-mono text-sm">{s.license_key}</p>
           {s.suspend_reason && st === 'SUSPENDED' && <p className="text-sm text-[#EF4444]">Reason: {s.suspend_reason}</p>}

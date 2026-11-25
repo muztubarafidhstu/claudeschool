@@ -1,0 +1,29 @@
+name = "scholardesk-cloud"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Admin panel (Next.js static export in ../admin/out) served by the same Worker.
+# Requests that match a file are served for free without running the Worker; /api/* runs the Worker.
+[assets]
+directory = "../admin/out"
+binding = "ASSETS"
+not_found_handling = "404-page"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "scholardesk"
+database_id = "REPLACE_AFTER_wrangler_d1_create"
+migrations_dir = "migrations"
+
+[vars]
+GRACE_DAYS = "7"
+
+# Secrets (wrangler secret put …):
+#   ADMIN_PASSWORD_HASH   pbkdf2$<iterations>$<salt b64>$<hash b64>   (node scripts/hash-password.mjs <password>)
+#   ADMIN_JWT_SECRET      long random string
+#   LICENSE_PRIVATE_KEY   PKCS#8 PEM (same key as before, so installed apps keep working)
+#   LICENSE_PUBLIC_KEY    SPKI PEM
+
+# Custom domain (needs rafid0.com on Cloudflare DNS):
+# routes = [ { pattern = "school.rafid0.com", custom_domain = true } ]

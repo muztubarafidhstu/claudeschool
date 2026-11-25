@@ -13,8 +13,10 @@ import { getMachineId, httpFetch, invoke, isTauri } from './platform';
 import { db } from './db';
 import publicKeyPem from '../../src-tauri/keys/license_public.pem?raw';
 
-export const LICENSE_API = import.meta.env.VITE_LICENSE_API ?? 'https://scool.rafid5.com/api/v1';
+export const LICENSE_API = import.meta.env.VITE_LICENSE_API ?? 'https://school.rafid0.com/api/v1';
 export const APP_VERSION = '1.0.0';
+/** This desktop build's product. The coaching app sends 'COACHING'. */
+export const PRODUCT: 'SCHOOL' | 'COACHING' = 'SCHOOL';
 export const GRACE_SECONDS = 7 * 86400;
 const CLOCK_TOLERANCE = 10 * 60; // 10 minutes of normal drift allowed
 
@@ -148,7 +150,7 @@ export async function requestActivation(form: RegistrationForm): Promise<SyncRes
   try {
     res = await httpFetch(`${LICENSE_API}/register`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...form, machine_id, app_version: APP_VERSION }),
+      body: JSON.stringify({ ...form, product: PRODUCT, machine_id, app_version: APP_VERSION }),
     });
   } catch {
     return { ok: false, message: 'Cannot reach the server. Check the internet connection and try again.' };

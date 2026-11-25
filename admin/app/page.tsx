@@ -12,7 +12,8 @@ export default function Dashboard() {
   if (!s) return <p className="text-slate-500">Loading…</p>;
   const kpis = [
     { label: 'Waiting for approval', value: s.pending, icon: BellRing, color: 'text-blue-600', href: '/pending/' },
-    { label: 'Active schools', value: s.active, icon: CheckCircle2, color: 'text-[#10B981]' },
+    { label: 'Schools / Coaching', value: `${s.schools ?? 0} / ${s.coachings ?? 0}`, icon: Users, color: 'text-violet-600' },
+    { label: 'Active licenses', value: s.active, icon: CheckCircle2, color: 'text-[#10B981]' },
     { label: 'Suspended', value: s.suspended, icon: PauseCircle, color: 'text-[#EF4444]' },
     { label: 'Expired / past due', value: s.expired, icon: AlarmClock, color: 'text-[#F59E0B]' },
     { label: 'Expiring ≤ 15 days', value: s.expiring_soon, icon: AlarmClock, color: 'text-[#F59E0B]' },

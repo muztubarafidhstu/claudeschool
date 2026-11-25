@@ -15,7 +15,7 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://scool.rafid5.com/*" },
+        { "url": "https://school.rafid0.com/*" },
         { "url": "http://localhost:8080/*" },
         { "url": "https://oauth2.googleapis.com/*" },
         { "url": "https://www.googleapis.com/*" }
