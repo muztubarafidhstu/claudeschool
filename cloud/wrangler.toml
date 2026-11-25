@@ -21,9 +21,10 @@ GRACE_DAYS = "7"
 
 # Secrets (wrangler secret put …):
 #   ADMIN_PASSWORD_HASH   pbkdf2$<iterations>$<salt b64>$<hash b64>   (node scripts/hash-password.mjs <password>)
-#   ADMIN_JWT_SECRET      long random string
+#   ADMIN_JWT_SECRET      optional — derived from LICENSE_PRIVATE_KEY when not set
 #   LICENSE_PRIVATE_KEY   PKCS#8 PEM (same key as before, so installed apps keep working)
 #   LICENSE_PUBLIC_KEY    SPKI PEM
 
-# Custom domain (needs rafid0.com on Cloudflare DNS):
-# routes = [ { pattern = "school.rafid0.com", custom_domain = true } ]
+# Custom domain (rafid0.com must be on Cloudflare DNS). Cloudflare creates the DNS record and HTTPS certificate.
+workers_dev = false
+routes = [ { pattern = "school.rafid0.com", custom_domain = true } ]

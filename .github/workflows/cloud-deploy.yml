@@ -1,0 +1,91 @@
+# Deploys the license server + owner panel to Cloudflare (free) at https://school.rafid0.com
+# Repository secrets needed (GitHub → Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN     Cloudflare token (Edit Cloudflare Workers + D1 Edit + DNS Edit)
+#   SD_LICENSE_PRIVATE_KEY   full contents of license_private.pem
+#   SD_ADMIN_PASSWORD_HASH   pbkdf2$… line (cloud/scripts/hash-password.mjs)
+#   CLOUDFLARE_ACCOUNT_ID    optional (only if the token can see more than one account)
+name: Deploy to Cloudflare
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, scholardesk-pro-v1]
+    paths: ['cloud/**', 'admin/**', '.github/workflows/cloud-deploy.yml']
+concurrency: cloudflare-deploy
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          PK: ${{ secrets.SD_LICENSE_PRIVATE_KEY }}
+          PH: ${{ secrets.SD_ADMIN_PASSWORD_HASH }}
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$PK" ] || missing="$missing SD_LICENSE_PRIVATE_KEY"
+          [ -n "$PH" ] || missing="$missing SD_ADMIN_PASSWORD_HASH"
+          if [ -n "$missing" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
+            echo "::notice::Skipping deploy — add the repository secrets first:$missing"; echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          case "$PH" in pbkdf2\$*) ;; *) echo "::error::SD_ADMIN_PASSWORD_HASH must start with pbkdf2\$"; exit 1;; esac
+          case "$PK" in *"BEGIN PRIVATE KEY"*) ;; *) echo "::error::SD_LICENSE_PRIVATE_KEY must be the whole license_private.pem file"; exit 1;; esac
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with: { node-version: 22 }
+      - name: Build owner panel
+        if: steps.check.outputs.ready == 'true'
+        working-directory: admin
+        run: npm ci && npm run build
+      - name: Install worker tools
+        if: steps.check.outputs.ready == 'true'
+        working-directory: cloud
+        run: npm ci
+      - name: Create / find the D1 database
+        if: steps.check.outputs.ready == 'true'
+        working-directory: cloud
+        run: |
+          id=$(npx wrangler d1 list --json | jq -r '.[] | select(.name=="scholardesk") | .uuid')
+          if [ -z "$id" ]; then
+            npx wrangler d1 create scholardesk
+            id=$(npx wrangler d1 list --json | jq -r '.[] | select(.name=="scholardesk") | .uuid')
+          fi
+          echo "D1 database: $id"
+          sed -i "s/^database_id = .*/database_id = \"$id\"/" wrangler.toml
+      - name: Apply database migrations
+        if: steps.check.outputs.ready == 'true'
+        working-directory: cloud
+        run: npx wrangler d1 migrations apply scholardesk --remote
+      - name: Deploy Worker + panel to school.rafid0.com
+        if: steps.check.outputs.ready == 'true'
+        working-directory: cloud
+        run: |
+          if ! npx wrangler deploy; then
+            echo "::error::Deploy failed. If the message mentions the zone or custom domain: rafid0.com must be added to Cloudflare and its nameservers switched (status 'Active') before school.rafid0.com can be used."
+            exit 1
+          fi
+      - name: Set secrets
+        if: steps.check.outputs.ready == 'true'
+        working-directory: cloud
+        env:
+          PK: ${{ secrets.SD_LICENSE_PRIVATE_KEY }}
+          PH: ${{ secrets.SD_ADMIN_PASSWORD_HASH }}
+        run: |
+          printf '%s' "$PK" | npx wrangler secret put LICENSE_PRIVATE_KEY
+          printf '%s' "$PH" | npx wrangler secret put ADMIN_PASSWORD_HASH
+          cat ../desktop/src-tauri/keys/license_public.pem | npx wrangler secret put LICENSE_PUBLIC_KEY
+      - name: Check https://school.rafid0.com
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS https://school.rafid0.com/api/v1/health; then echo; echo "LIVE: https://school.rafid0.com"; exit 0; fi
+            sleep 15
+          done
+          echo "::warning::Deployed, but https://school.rafid0.com is not answering yet (DNS/certificate can take up to 30 minutes)."

@@ -5,7 +5,7 @@ export interface Env {
   ASSETS: Fetcher;
   GRACE_DAYS: string;
   ADMIN_PASSWORD_HASH: string;
-  ADMIN_JWT_SECRET: string;
+  ADMIN_JWT_SECRET?: string;
   LICENSE_PRIVATE_KEY: string;
   LICENSE_PUBLIC_KEY: string;
 }
@@ -72,11 +72,16 @@ export async function signGraceToken(env: Env, c: Record<string, unknown>, now: 
 }
 export const publicKeyPem = (env: Env) => pem(env.LICENSE_PUBLIC_KEY);
 
-const hs = (env: Env) => new TextEncoder().encode(env.ADMIN_JWT_SECRET);
-export const signAdmin = (env: Env) =>
-  new SignJWT({ role: 'owner' }).setProtectedHeader({ alg: 'HS256' }).setSubject('owner').setIssuedAt().setExpirationTime('12h').sign(hs(env));
+/** Panel session key: ADMIN_JWT_SECRET if set, otherwise derived from the license private key (one secret fewer). */
+async function hs(env: Env) {
+  if (env.ADMIN_JWT_SECRET) return new TextEncoder().encode(env.ADMIN_JWT_SECRET);
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`scholardesk-admin-session:${env.LICENSE_PRIVATE_KEY}`));
+  return new Uint8Array(d);
+}
+export const signAdmin = async (env: Env) =>
+  new SignJWT({ role: 'owner' }).setProtectedHeader({ alg: 'HS256' }).setSubject('owner').setIssuedAt().setExpirationTime('12h').sign(await hs(env));
 export async function verifyAdmin(env: Env, token: string) {
-  const { payload } = await jwtVerify(token, hs(env), { algorithms: ['HS256'] });
+  const { payload } = await jwtVerify(token, await hs(env), { algorithms: ['HS256'] });
   if (payload.role !== 'owner') throw new Error('bad role');
 }
 
