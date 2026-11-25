@@ -40,6 +40,7 @@ export function terms(s: AppSettings) {
 /** e.g. "Class 9-A (Science)" or "Physics" */
 export function placement(s: AppSettings, st: { class_no: number; section?: string | null; stream?: string | null }, showSection = s.modules.sections) {
   const base = groupLabel(s, st.class_no);
-  const sec = showSection && st.section ? `-${st.section}` : '';
+  // Only show the section letter when that class/batch really has more than one section.
+  const sec = showSection && st.section && (s.sectionsPerClass[st.class_no] ?? 1) > 1 ? `-${st.section}` : '';
   return `${base}${sec}${!isCoaching(s) && st.stream ? ` (${st.stream})` : ''}`;
 }
