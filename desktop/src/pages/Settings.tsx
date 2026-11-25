@@ -88,11 +88,22 @@ function ModulesTab() {
     { key: 'attendance', label: 'Daily Attendance Tracking', desc: 'Daily roll call, daily summaries and monthly grids.' },
   ];
   return (
+    <>
     <Card title="Enable / disable modules" actions={<span className="text-xs text-slate-500">Disabled modules disappear from the sidebar, dashboard and student profiles.</span>}>
       <div className="grid gap-3 p-4 md:grid-cols-2">
         {items.map((i) => <Switch key={i.key} checked={settings.modules[i.key]} label={i.label} desc={i.desc} onChange={(v) => update({ modules: { ...settings.modules, [i.key]: v } })} />)}
       </div>
     </Card>
+    <Card title="Automatic screen lock">
+      <div className="grid gap-3 p-4 md:grid-cols-2">
+        <Switch checked={settings.screenLock.enabled} label="Lock the screen when the app is not used" desc="Needs the Screen lock PIN to continue (default 1234 — change it under PINs & License)." onChange={(v) => update({ screenLock: { ...settings.screenLock, enabled: v } })} />
+        <label className="block"><span className="label">Lock after</span>
+          <select className="input" disabled={!settings.screenLock.enabled} value={settings.screenLock.minutes} onChange={(e) => update({ screenLock: { ...settings.screenLock, minutes: Number(e.target.value) } })}>
+            {[1, 2, 5, 10, 15, 30].map((m) => <option key={m} value={m}>{m} minute{m > 1 ? 's' : ''} without use</option>)}
+          </select></label>
+      </div>
+    </Card>
+    </>
   );
 }
 
@@ -192,7 +203,7 @@ function SecurityTab() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => { loadLicense().then(setLic); }, []);
-  const PinForm = ({ kind, label }: { kind: 'settings' | 'modify'; label: string }) => {
+  const PinForm = ({ kind, label }: { kind: 'settings' | 'modify' | 'screen'; label: string }) => {
     const [cur, setCur] = useState(''); const [next, setNext] = useState('');
     return (
       <div className="rounded-lg border border-line p-4">
@@ -207,7 +218,7 @@ function SecurityTab() {
   };
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <Card title="Security PINs"><div className="space-y-3 p-4"><PinForm kind="settings" label="Settings & System Control PIN (default 0000)" /><PinForm kind="modify" label="Modify & Delete Protection PIN (default 5555)" /></div></Card>
+      <Card title="Security PINs"><div className="space-y-3 p-4"><PinForm kind="settings" label="Settings & System Control PIN (default 0000)" /><PinForm kind="modify" label="Modify & Delete Protection PIN (default 5555)" /><PinForm kind="screen" label="Screen lock PIN (default 1234)" /></div></Card>
       <Card title="License & subscription">
         <div className="space-y-2 p-4 text-sm">
           {PREVIEW_BUILD ? (

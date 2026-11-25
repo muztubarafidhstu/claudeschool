@@ -70,14 +70,14 @@ function EmergencyBox({ ev, onDone }: { ev: Evaluation | null; onDone: () => Pro
         <button className="flex w-full items-center justify-center gap-2 text-sm font-medium text-slate-600 hover:text-brand" onClick={() => setOpen(true)}><LifeBuoy size={16} /> Emergency access ({EMERGENCY_DAYS} days)</button>
       ) : (
         <form onSubmit={apply} className="space-y-3">
-          <p className="text-sm text-slate-600">Call your software provider and tell them this <b>Lock ID</b> and <b>PC ID</b>. They will give you a one-time code that opens the software for {EMERGENCY_DAYS} days.</p>
+          <p className="text-sm text-slate-600">Call your software provider. Enter the <b>emergency PIN</b> they tell you (or a one-time code for this <b>Lock ID</b>). It opens the software for {EMERGENCY_DAYS} days, once per lock.</p>
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-slate-50 p-2"><div className="text-[10px] uppercase text-slate-500">Lock ID</div><div className="font-mono text-lg font-bold tracking-wider">{lockId}</div></div>
             <div className="rounded-lg bg-slate-50 p-2"><div className="text-[10px] uppercase text-slate-500">PC ID</div><div className="font-mono text-sm font-bold">{mid}</div></div>
           </div>
-          <input className="input text-center font-mono text-lg uppercase tracking-[0.3em]" maxLength={9} placeholder="XXXXXXXX" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+          <input className="input text-center font-mono text-lg uppercase tracking-[0.3em]" maxLength={9} placeholder="PIN or code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
           {msg && <p className={`rounded-lg px-3 py-2 text-sm ${msg.ok ? 'bg-emerald-50 text-ok' : 'bg-red-50 text-bad'}`}>{msg.text}</p>}
-          <button className="btn-ghost w-full" disabled={code.replace(/\W/g, '').length < 8}><LifeBuoy size={16} /> Unlock with emergency code</button>
+          <button className="btn-ghost w-full" disabled={code.replace(/\W/g, '').length < 4}><LifeBuoy size={16} /> Unlock for {EMERGENCY_DAYS} days</button>
         </form>
       )}
     </div>

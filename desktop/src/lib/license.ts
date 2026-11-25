@@ -34,6 +34,8 @@ export interface LicenseState {
   payment_instructions: string;
   /** Decided by the server from the license key: SCHOOL or COACHING. */
   product?: 'SCHOOL' | 'COACHING';
+  /** Salted hash of the owner's emergency PIN (pbkdf2$iterations$salt$hash), refreshed on every online check. */
+  emergency_pin_hash?: string | null;
 }
 export type LockReason = 'NEEDS_ACTIVATION' | 'PENDING' | 'CLOCK_TAMPER' | 'OFFLINE_TOO_LONG' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH';
 export interface Evaluation {
@@ -72,7 +74,16 @@ async function devCode(mid: string, lockId: string) {
   return Array.from(m.slice(0, 8), (b) => A[b % A.length]).join('');
 }
 
+async function pinMatches(pin: string, stored?: string | null) {
+  const [alg, it, salt, hash] = (stored ?? '').split('$');
+  if (alg !== 'pbkdf2' || !salt || !hash) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(atob(salt), (c) => c.charCodeAt(0)), iterations: Number(it) }, key, 256));
+  return btoa(String.fromCharCode(...bits)) === hash;
+}
+
 export async function emergencyAvailable() {
+  if ((await loadLicense())?.emergency_pin_hash) return true; // owner's emergency PIN
   if (isTauri) return invoke<boolean>('emergency_available').catch(() => false);
   return !!DEV_SECRET;
 }
@@ -82,10 +93,11 @@ export async function applyEmergencyCode(code: string): Promise<{ ok: boolean; m
   const lockId = await currentLockId(st);
   const prev = await getConfig<EmergencyGrant | null>('emergency', null);
   if (prev?.lock_id === lockId) return { ok: false, message: 'An emergency code was already used for this lock. Please pay and activate the subscription online.' };
-  const valid = isTauri
+  const typed = code.trim();
+  const valid = (/^\d{4,8}$/.test(typed) && await pinMatches(typed, st?.emergency_pin_hash)) || (isTauri
     ? await invoke<boolean>('verify_emergency_code', { lockId, code }).catch(() => false)
-    : !!DEV_SECRET && (await devCode(await getMachineId(), lockId)) === code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  if (!valid) return { ok: false, message: 'This code is not correct for this PC and Lock ID.' };
+    : !!DEV_SECRET && (await devCode(await getMachineId(), lockId)) === code.replace(/[^A-Za-z0-9]/g, '').toUpperCase());
+  if (!valid) return { ok: false, message: 'This PIN / code is not correct.' };
   const now = nowUtc();
   await setConfig('emergency', { lock_id: lockId, granted_at: now, until: now + EMERGENCY_DAYS * 86400, last_seen: now } satisfies EmergencyGrant);
   return { ok: true, message: `Unlocked for ${EMERGENCY_DAYS} days.` };
@@ -184,6 +196,7 @@ export async function syncOnline(licenseKey?: string): Promise<SyncResult> {
     payment_notice: body.payment_notice ?? '',
     payment_instructions: body.payment_instructions ?? '',
     product: body.product ?? prev?.product ?? 'SCHOOL',
+    emergency_pin_hash: body.emergency_pin_hash ?? prev?.emergency_pin_hash ?? null,
   };
   if (body.status === 'ACTIVE' && !(await verifyToken(body.grace_token_jwt))) {
     return { ok: false, message: 'The server response could not be verified (signature mismatch). Contact support.' };

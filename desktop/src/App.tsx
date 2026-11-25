@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppProvider, useApp } from './components/AppContext';
 import Layout, { isPageEnabled, type Page } from './components/Layout';
 import StudentProfile from './components/StudentProfile';
+import ScreenLock from './components/ScreenLock';
 import LicenseGate from './pages/LicenseGate';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
@@ -80,6 +81,7 @@ function Main({ banner }: { banner: Evaluation | null }) {
       {page === 'backup' && <Backup />}
       {page === 'settings' && <SettingsPage />}
       <StudentProfile />
+      <ScreenLock />
     </Layout>
   );
 }

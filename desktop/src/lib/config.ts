@@ -17,6 +17,8 @@ export interface AppSettings {
   academicYear: number;
   lang: 'en' | 'bn';
   onboarded: boolean;
+  /** Lock the screen after this many idle minutes (needs the Screen lock PIN). */
+  screenLock: { enabled: boolean; minutes: number };
 }
 
 export const subjectGroup = (classNo: number, stream?: string | null): SubjectGroup =>
@@ -53,6 +55,7 @@ export function defaultSettings(): AppSettings {
     academicYear: year,
     lang: 'en',
     onboarded: false,
+    screenLock: { enabled: true, minutes: 2 },
   };
 }
 
@@ -72,7 +75,7 @@ export async function setConfig(key: string, value: unknown) {
 export async function loadSettings(): Promise<AppSettings> {
   const d = defaultSettings();
   const saved = await getConfig<Partial<AppSettings>>('settings', {});
-  return { ...d, ...saved, school: { ...d.school, ...saved.school }, modules: { ...d.modules, ...saved.modules } };
+  return { ...d, ...saved, school: { ...d.school, ...saved.school }, modules: { ...d.modules, ...saved.modules }, screenLock: { ...d.screenLock, ...saved.screenLock } };
 }
 export const saveSettings = (s: AppSettings) => setConfig('settings', s);
 

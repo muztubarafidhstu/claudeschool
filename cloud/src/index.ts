@@ -8,7 +8,7 @@ import { cors } from 'hono/cors';
 import { z, ZodError } from 'zod';
 import {
   type Env, addPeriod, all, audit, bump, generateLicenseKey, isoNow, nowSec, one, peek, publicKeyPem, run,
-  signAdmin, signGraceToken, todayUtc, uuid, verifyAdmin, verifyPassword, emergencyCode, normLockId,
+  signAdmin, signGraceToken, todayUtc, uuid, verifyAdmin, verifyPassword, emergencyCode, normLockId, hashPassword,
 } from './lib';
 
 type C = Context<{ Bindings: Env }>;
@@ -36,6 +36,17 @@ api.use('*', cors({ origin: '*', allowHeaders: ['content-type', 'authorization']
 
 const PRODUCTS = ['SCHOOL', 'COACHING'] as const;
 type Status = 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'INVALID' | 'MACHINE_MISMATCH' | 'PENDING';
+
+/** Salted hash of the owner's emergency PIN, created when missing or when the PIN changed. */
+async function emergencyPinHash(db: D1Database): Promise<string | null> {
+  const rows = await all<{ key: string; value: string }>(db, "SELECT key, value FROM owner_settings WHERE key IN ('emergency_pin','emergency_pin_hash')");
+  const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  if (!m.emergency_pin) return null;
+  if (m.emergency_pin_hash) return m.emergency_pin_hash;
+  const h = await hashPassword(m.emergency_pin, 10000);
+  await run(db, "INSERT INTO owner_settings(key, value) VALUES ('emergency_pin_hash', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", h);
+  return h;
+}
 
 async function paymentInstructions(db: D1Database) {
   return (await one<{ value: string }>(db, "SELECT value FROM owner_settings WHERE key='payment_instructions'"))?.value ?? '';
@@ -119,6 +130,8 @@ api.post('/verify-license', async (c) => {
     grace_days: Number(c.env.GRACE_DAYS || 7),
     payment_notice: notice,
     payment_instructions: instructions,
+    // Only for known PCs: lets the app accept the owner's emergency PIN while offline.
+    emergency_pin_hash: lic && status !== 'MACHINE_MISMATCH' ? await emergencyPinHash(db) : null,
   }, status === 'INVALID' ? 404 : 200);
 });
 
@@ -413,12 +426,17 @@ admin.get('/payments', async (c) => {
 });
 
 admin.get('/settings', async (c) => {
-  const rows = await all<{ key: string; value: string }>(c.env.DB, 'SELECT key, value FROM owner_settings');
+  const rows = await all<{ key: string; value: string }>(c.env.DB, "SELECT key, value FROM owner_settings WHERE key != 'emergency_pin_hash'");
   return c.json(Object.fromEntries(rows.map((r) => [r.key, r.value])));
 });
 
 admin.put('/settings', async (c) => {
   const b = z.record(z.string()).parse(await c.req.json());
+  delete b.emergency_pin_hash;
+  if ('emergency_pin' in b) {
+    if (!/^\d{4,8}$/.test(b.emergency_pin)) return c.json({ error: 'Emergency PIN must be 4–8 digits.' }, 400);
+    b.emergency_pin_hash = await hashPassword(b.emergency_pin, 10000);
+  }
   for (const [k, v] of Object.entries(b)) {
     await run(c.env.DB, 'INSERT INTO owner_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at', k, v);
   }

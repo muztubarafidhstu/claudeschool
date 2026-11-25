@@ -1,7 +1,7 @@
 import { getConfig, setConfig } from './config';
 
-export type PinKind = 'settings' | 'modify';
-const DEFAULTS: Record<PinKind, string> = { settings: '0000', modify: '5555' };
+export type PinKind = 'settings' | 'modify' | 'screen';
+const DEFAULTS: Record<PinKind, string> = { settings: '0000', modify: '5555', screen: '1234' };
 
 async function hash(pin: string) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`scholardesk-pin:${pin}`));
