@@ -20,6 +20,7 @@ services:
       retries: 20
 
   app:
+    image: scholardesk-app:latest   # downloaded ready-made by install.sh (built by GitHub Actions)
     build:
       context: ../..
       dockerfile: Dockerfile

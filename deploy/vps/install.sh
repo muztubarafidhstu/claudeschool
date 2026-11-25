@@ -41,10 +41,26 @@ CF=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyf
 [ -n "$NET" ] && [ -n "$CF" ] || die "Could not read Caddy's network or Caddyfile."
 echo "Caddy: $CADDY · network: $NET · Caddyfile: $CF"
 
-say "Building and starting ScholarDesk (first time takes 3–6 minutes)"
+say "Checking memory (small servers get a 2 GB swap file)"
+if [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 2500 ] && [ "$(awk '/SwapTotal/ {print $2}' /proc/meminfo)" -eq 0 ]; then
+  fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+  chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  echo "2 GB swap added."
+else
+  echo "Memory OK."
+fi
+
+say "Downloading the ready-made app (built by GitHub)"
 export DATA_DIR="$DATA" CADDY_NETWORK="$NET"
 cd "$APP_DIR/deploy/vps"
-docker compose --env-file "$DATA/.env" up -d --build
+IMG_URL="https://github.com/muztubarafidhstu/claudeschool/releases/download/server-image/scholardesk-app.tar.gz"
+if curl -fL --retry 3 --progress-bar "$IMG_URL" | gunzip | docker load; then
+  docker compose --env-file "$DATA/.env" up -d --no-build
+else
+  echo "Download failed — building on this server instead (slow on small servers, 10–20 minutes)."
+  docker compose --env-file "$DATA/.env" up -d --build
+fi
 
 say "Waiting for the app to become healthy"
 for i in $(seq 1 60); do

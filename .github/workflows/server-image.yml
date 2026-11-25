@@ -1,0 +1,26 @@
+# Builds the ScholarDesk server + web panel Docker image on GitHub (so the small VPS never has to build it)
+# and publishes it as a release asset that deploy/vps/install.sh downloads.
+name: Server image
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, scholardesk-pro-v1]
+    paths: ['admin/**', 'server/**', 'Dockerfile', 'deploy/**', '.github/workflows/server-image.yml']
+permissions:
+  contents: write
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image (linux/amd64)
+        run: docker build --platform linux/amd64 -t scholardesk-app:latest .
+      - name: Save image
+        run: docker save scholardesk-app:latest | gzip -9 > scholardesk-app.tar.gz && ls -lh scholardesk-app.tar.gz
+      - name: Publish to release "server-image"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view server-image >/dev/null 2>&1 || gh release create server-image --prerelease --title "Server image (auto-built)" --notes "Docker image used by deploy/vps/install.sh. Rebuilt automatically on every server change." --target "${GITHUB_SHA}"
+          echo "${GITHUB_SHA}" > scholardesk-app.version
+          gh release upload server-image scholardesk-app.tar.gz scholardesk-app.version --clobber
