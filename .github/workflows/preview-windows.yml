@@ -57,8 +57,10 @@ jobs:
         run: |
           exe=$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1)
           cp "$exe" ScholarDesk-Pro-Setup.exe
-          gh release view installer >/dev/null 2>&1 || gh release create installer --title "ScholarDesk Pro — Windows installer" --notes "Latest installer for schools. Download ScholarDesk-Pro-Setup.exe. Rebuilt automatically from Actions → Windows installer → licensed." --target "${GITHUB_SHA}"
-          gh release upload installer ScholarDesk-Pro-Setup.exe --clobber
+          msi=$(ls src-tauri/target/release/bundle/msi/*.msi | head -1)
+          cp "$msi" ScholarDesk-Pro-Setup.msi
+          gh release view installer >/dev/null 2>&1 || gh release create installer --title "ScholarDesk Pro — Windows installer" --notes "Latest installer for schools (Windows 10/11, 64-bit). Setup.exe / Setup.msi need internet during install if WebView2 is missing; the -Offline files include WebView2. Rebuilt from Actions → Windows installer → licensed." --target "${GITHUB_SHA}"
+          gh release upload installer ScholarDesk-Pro-Setup.exe ScholarDesk-Pro-Setup.msi --clobber
       - name: Build OFFLINE installer (WebView2 included)
         if: ${{ inputs.mode == 'licensed' && inputs.offline }}
         shell: bash
@@ -70,9 +72,9 @@ jobs:
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          rm -rf src-tauri/target/release/bundle/nsis
-          npx tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false,"windows":{"webviewInstallMode":{"type":"offlineInstaller","silent":true}}}}'
-          exe=$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1)
-          cp "$exe" ScholarDesk-Pro-Setup-Offline.exe
-          ls -la ScholarDesk-Pro-Setup-Offline.exe
-          gh release upload installer ScholarDesk-Pro-Setup-Offline.exe --clobber
+          rm -rf src-tauri/target/release/bundle/nsis src-tauri/target/release/bundle/msi
+          npx tauri build --bundles nsis,msi --config '{"bundle":{"createUpdaterArtifacts":false,"windows":{"webviewInstallMode":{"type":"offlineInstaller","silent":true}}}}'
+          cp "$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1)" ScholarDesk-Pro-Setup-Offline.exe
+          cp "$(ls src-tauri/target/release/bundle/msi/*.msi | head -1)" ScholarDesk-Pro-Setup-Offline.msi
+          ls -la ScholarDesk-Pro-Setup-Offline.*
+          gh release upload installer ScholarDesk-Pro-Setup-Offline.exe ScholarDesk-Pro-Setup-Offline.msi --clobber
