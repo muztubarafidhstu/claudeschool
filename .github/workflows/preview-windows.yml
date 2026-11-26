@@ -10,6 +10,10 @@ on:
         type: choice
         options: [preview, licensed]
         default: preview
+      offline:
+        description: 'Also build the OFFLINE installer (includes Microsoft WebView2, ~140 MB, installs without internet)'
+        type: boolean
+        default: false
   push:
     branches: [main, scholardesk-pro-v1]
     paths: ['desktop/**', '.github/workflows/preview-windows.yml']
@@ -55,3 +59,20 @@ jobs:
           cp "$exe" ScholarDesk-Pro-Setup.exe
           gh release view installer >/dev/null 2>&1 || gh release create installer --title "ScholarDesk Pro — Windows installer" --notes "Latest installer for schools. Download ScholarDesk-Pro-Setup.exe. Rebuilt automatically from Actions → Windows installer → licensed." --target "${GITHUB_SHA}"
           gh release upload installer ScholarDesk-Pro-Setup.exe --clobber
+      - name: Build OFFLINE installer (WebView2 included)
+        if: ${{ inputs.mode == 'licensed' && inputs.offline }}
+        shell: bash
+        env:
+          VITE_PREVIEW_BUILD: '0'
+          VITE_LICENSE_API: https://school.rafid0.com/api/v1
+          SD_EMERGENCY_SECRET: ${{ secrets.SD_EMERGENCY_SECRET }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf src-tauri/target/release/bundle/nsis
+          npx tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false,"windows":{"webviewInstallMode":{"type":"offlineInstaller","silent":true}}}}'
+          exe=$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1)
+          cp "$exe" ScholarDesk-Pro-Setup-Offline.exe
+          ls -la ScholarDesk-Pro-Setup-Offline.exe
+          gh release upload installer ScholarDesk-Pro-Setup-Offline.exe --clobber
