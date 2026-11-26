@@ -13,14 +13,25 @@ export default function PrintPreview({ open, onClose, children, actions, title =
 }) {
   const el = document.getElementById('print-portal')!;
   const doc = useRef<HTMLDivElement>(null);
+  const opened = useRef(false); // the auto window opens once per preview, even if the page behind re-renders
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    if (!open) return;
+    if (!open) { opened.current = false; return; }
     el.classList.add('open');
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     window.addEventListener('keydown', h);
-    const t = openWindow ? window.setTimeout(() => { void document.fonts.ready.then(() => doc.current && openPrintWindow(doc.current, title, fileName ?? title)); }, 400) : undefined;
-    return () => { el.classList.remove('open'); window.removeEventListener('keydown', h); clearTimeout(t); };
-  }, [open, el, onClose, openWindow]); // eslint-disable-line
+    return () => { el.classList.remove('open'); window.removeEventListener('keydown', h); };
+  }, [open, el]);
+  useEffect(() => {
+    if (!open || !openWindow || opened.current) return;
+    const t = window.setTimeout(() => {
+      if (opened.current) return;
+      opened.current = true;
+      void document.fonts.ready.then(() => doc.current && openPrintWindow(doc.current, title, fileName ?? title));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [open, openWindow]); // eslint-disable-line
   if (!open) return null;
   return createPortal(
     <>
