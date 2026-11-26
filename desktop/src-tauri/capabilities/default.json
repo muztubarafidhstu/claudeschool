@@ -3,11 +3,15 @@
   "identifier": "default",
   "description": "ScholarDesk Pro main window",
   "windows": [
-    "main"
+    "main",
+    "print-*"
   ],
   "permissions": [
     "core:default",
     "core:event:default",
+    "fs:allow-write-file",
+    "core:window:allow-close",
+    "core:webview:allow-create-webview-window",
     "opener:allow-open-url",
     "dialog:default",
     "fs:allow-write-text-file",

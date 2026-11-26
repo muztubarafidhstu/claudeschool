@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Receipt, Printer, X } from 'lucide-react';
+import { Receipt, Printer, X, Save } from 'lucide-react';
 import { useApp } from '../components/AppContext';
 import { Badge, Card, Empty, Field } from '../components/ui';
 import StudentSearch from '../components/StudentSearch';
@@ -51,7 +51,7 @@ export default function Fees({ focus }: { focus?: { id: number; n: number } | nu
   const remaining = Math.max(0, regular - already);
   useEffect(() => { setAmount(remaining); }, [head, st?.id, fin]); // eslint-disable-line
 
-  async function collect() {
+  async function collect(print: boolean) {
     if (!st) return;
     if (amount <= 0) return toast('Enter an amount greater than zero.', 'err');
     if (amount > remaining) return toast(`Amount exceeds the remaining due (${money(remaining)}) for this head.`, 'err');
@@ -60,8 +60,10 @@ export default function Fees({ focus }: { focus?: { id: number; n: number } | nu
       [st.id, row.receipt_no, row.fee_type, row.period, row.regular_amount, row.paid_amount, row.due_after, row.paid_on, row.note]);
     const nextFin = await loadStudentFinance(st, settings);
     setFin(nextFin);
+    // This head is fully paid now — move on to the next head that still has a due amount.
+    if (row.due_after === 0) { const nextDue = nextFin.heads.find((h) => h.due > 0); if (nextDue) setHead(nextDue.key); }
     const attMonth = /^\d{4}-\d{2}$/.test(head) ? head : paidOn.slice(0, 7);
-    setReceipt({ row: { ...row, id: r.last_insert_id, student_id: st.id }, totalDue: nextFin.totalDue, att: await studentMonth(st.id, attMonth), attMonth, fresh: true });
+    if (print) setReceipt({ row: { ...row, id: r.last_insert_id, student_id: st.id }, totalDue: nextFin.totalDue, att: await studentMonth(st.id, attMonth), attMonth, fresh: true });
     setNote(''); bump();
     toast(`Payment of ${money(amount)} recorded`);
   }
@@ -95,7 +97,10 @@ export default function Fees({ focus }: { focus?: { id: number; n: number } | nu
                 <Field label="Note (optional)"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
                 <div className="md:col-span-2 flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
                   <span className="text-sm">Due after this payment: <b className={remaining - amount > 0 ? 'text-due' : 'text-ok'}>{money(Math.max(0, remaining - amount))}</b></span>
-                  <button className="btn-primary" onClick={collect} disabled={!remaining}><Receipt size={16} /> Save Payment & Print Receipt</button>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn-ghost" onClick={() => collect(false)} disabled={!remaining}><Save size={16} /> Save Payment</button>
+                    <button className="btn-primary" onClick={() => collect(true)} disabled={!remaining}><Receipt size={16} /> Save & Print Receipt</button>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -122,7 +127,7 @@ export default function Fees({ focus }: { focus?: { id: number; n: number } | nu
           </Card>
         </div>
       ) : <Card><Empty>Search a student to collect fees, partial payments or previous dues.</Empty></Card>}
-      <PrintPreview open={!!receipt} autoPrint={receipt?.fresh} onClose={() => setReceipt(null)} title="Fee receipt + monthly attendance report (2 pages)">
+      <PrintPreview open={!!receipt} openWindow={receipt?.fresh} fileName={receipt ? `Receipt_${receipt.row.receipt_no}` : undefined} onClose={() => setReceipt(null)} title="Fee receipt + monthly attendance report (2 pages)">
         {receipt && st && <FeeReceipt school={settings.school} s={st} row={receipt.row} totalDue={receipt.totalDue} att={receipt.att} attMonth={receipt.attMonth} />}
       </PrintPreview>
     </div>

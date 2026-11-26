@@ -62,6 +62,7 @@ const VerifyBody = z.object({
   app_version: z.string().max(32).default('0.0.0'),
   student_count: z.number().int().min(0).max(100000).default(0),
   local_utc_timestamp: z.number().int().nonnegative(),
+  reset_ack: z.string().max(64).optional().nullable(),
 });
 
 /**
@@ -91,6 +92,12 @@ api.post('/verify-license', async (c) => {
     }
     status = lic.status;
     notice = lic.payment_notice ?? '';
+    // The app confirms a finished remote reset → clear it so it never runs twice.
+    if (lic.reset_id && b.reset_ack === lic.reset_id) {
+      await run(db, 'UPDATE licenses SET reset_id = NULL, reset_requested_at = NULL WHERE id = ?', lic.id);
+      await audit(db, 'RESET_DONE', 'license', lic.id, { reset_id: lic.reset_id });
+      lic.reset_id = null;
+    }
     if (status === 'ACTIVE' && b.student_count > lic.max_students) {
       notice = `Student count ${b.student_count} exceeds your plan limit (${lic.max_students}). Please upgrade.`;
     }
@@ -132,6 +139,8 @@ api.post('/verify-license', async (c) => {
     payment_instructions: instructions,
     // Only for known PCs: lets the app accept the owner's emergency PIN while offline.
     emergency_pin_hash: lic && status !== 'MACHINE_MISMATCH' ? await emergencyPinHash(db) : null,
+    // Owner-requested wipe of this PC's data (only for the PC the license is bound to).
+    reset_id: lic && status !== 'MACHINE_MISMATCH' && status !== 'INVALID' ? lic.reset_id ?? null : null,
   }, status === 'INVALID' ? 404 : 200);
 });
 
@@ -251,7 +260,7 @@ admin.get('/stats', async (c) => {
 
 const LIST_SQL = `
   SELECT s.*, l.id AS license_id, l.license_key, l.product, l.status, l.source, l.requested_at, l.requested_plan, l.billing_cycle, l.price_bdt,
-         l.valid_until, l.max_students, l.machine_id, l.last_seen_at, l.last_app_version, l.last_student_count, l.suspend_reason, l.payment_notice,
+         l.valid_until, l.max_students, l.machine_id, l.last_seen_at, l.last_app_version, l.last_student_count, l.suspend_reason, l.payment_notice, l.reset_requested_at,
          (l.valid_until < date('now')) AS is_past_due
     FROM schools s LEFT JOIN licenses l ON l.school_id = s.id`;
 const fixRow = (r: any) => (r ? { ...r, is_past_due: !!r.is_past_due } : r);
@@ -374,6 +383,25 @@ admin.patch('/licenses/:id', async (c) => {
   if (b.valid_until && b.valid_until >= todayUtc()) await run(db, "UPDATE licenses SET status='ACTIVE' WHERE id=? AND status='EXPIRED'", id);
   await audit(db, 'UPDATE_LICENSE', 'license', id, b);
   return c.json(await one(db, 'SELECT * FROM licenses WHERE id=?', id));
+});
+
+/** Remote "factory reset" of a school's app data. Requires the owner password again. */
+admin.post('/licenses/:id/reset-data', async (c) => {
+  const db = c.env.DB, id = c.req.param('id');
+  const { password } = z.object({ password: z.string().min(1).max(200) }).parse(await c.req.json());
+  if ((await peek(db, `loginfail:${ip(c)}`, 900)) >= 5) return c.json({ error: 'Too many wrong passwords. Try again in 15 minutes.' }, 429);
+  if (!(await verifyPassword(password, c.env.ADMIN_PASSWORD_HASH))) { await bump(db, `loginfail:${ip(c)}`, 900); return c.json({ error: 'Wrong password' }, 401); }
+  const resetId = uuid();
+  const r = await run(db, 'UPDATE licenses SET reset_id = ?, reset_requested_at = ?, updated_at = ? WHERE id = ?', resetId, isoNow(), isoNow(), id);
+  if (!r.meta.changes) return c.json({ error: 'Not found' }, 404);
+  await audit(db, 'RESET_REQUESTED', 'license', id, { reset_id: resetId });
+  return c.json({ ok: true, reset_id: resetId });
+});
+
+admin.post('/licenses/:id/reset-data/cancel', async (c) => {
+  await run(c.env.DB, 'UPDATE licenses SET reset_id = NULL, reset_requested_at = NULL WHERE id = ?', c.req.param('id'));
+  await audit(c.env.DB, 'RESET_CANCELLED', 'license', c.req.param('id'));
+  return c.json({ ok: true });
 });
 
 admin.post('/licenses/:id/reset-machine', async (c) => {

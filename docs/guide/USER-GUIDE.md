@@ -7,7 +7,7 @@
 ## দ্রুত শুরু (Bangla quick start)
 
 1. **ইনস্টল:** `ScholarDesk Pro_x64-setup.exe` চালান → *More info → Run anyway* → Install।
-2. **অ্যাক্টিভেশন:** প্রথম স্ক্রিনে **New school — request activation** বেছে নিন, তথ্য দিন, পাঠান। অথবা **I have a license key** দিয়ে কী লিখুন।
+2. **অ্যাক্টিভেশন:** প্রথম স্ক্রিনে **New school — request activation** বেছে নিন, তথ্য দিন, পাঠান। অথবা **I have a license key** → কী, স্কুল/কোচিংয়ের নাম ও লোগো দিন → **Submit & Check Subscription**।
 3. মালিক (আপনি) **school.rafid0.com → Pending requests → Approve** চাপলে সফটওয়্যার এক মিনিটের মধ্যে নিজে থেকে খুলে যাবে।
 4. **প্রথম সেটআপ:** স্কুল/কোচিংয়ের নাম লিখুন → *Start fresh* (নতুন) বা *Import demo data* (ডেমো)।
 5. **কোচিং হলে** সব জায়গায় "Class" এর বদলে **Batch** দেখাবে। *Settings → Batches* এ নিজের ব্যাচ (ICT, Physics, SSC…) যোগ করুন।
@@ -37,17 +37,18 @@ All school data stays **on the PC** (works without internet). The PC must go onl
 1. Run `ScholarDesk Pro_1.0.0_x64-setup.exe` (from the **nsis** folder). Windows may say *Windows protected your PC* — click **More info → Run anyway**.
 2. First screen:
    - **New school — request activation:** choose *School* or *Coaching centre*, fill in the name, contact person, mobile, district, address, approximate students and plan → **Send activation request**. The screen then shows **Waiting for Approval** and checks every minute.
-   - **I have a license key:** type the key from your provider (e.g. `SCH-2026-7KQ4-M9XD`) → **Activate License**.
+   - **I have a license key:** type the key from your provider (e.g. `SCH-2026-7KQ4-M9XD`), the school/coaching name (English and Bangla) and choose the **logo** → **Submit & Check Subscription**. The name and logo are filled in for you on the next screen (useful after reinstalling Windows).
 3. When approved, the app opens the **Welcome** screen: type the institution name (English/Bangla), then choose **Start fresh**, **Import demo data**, **Upload settings config** or **Restore a backup file**.
 
 ![Activation](img/01-activation.png)
+![Key screen with name and logo](img/30-key-screen.png)
 
 The license is bound to this PC. To move to a new PC, ask the provider to **Reset PC binding**, then restore your backup on the new PC.
 
 ## 3. Daily work
 
 ### New admission
-*New Admission* → choose the **Class/Batch** and **roll** (the Student ID is generated as `YYCCRR`: year · class/batch · roll) → fill in the student and guardian details → **Photo**: *Browse image file* or *Live webcam capture* → **Review A4 Summary** → **Print / Save PDF & Submit** (or *Submit only*). The father's mobile is used for searching and SMS.
+*New Admission* → choose the **Class/Batch** and **roll** (the Student ID is generated as `YYCCRR`: year · class/batch · roll) → fill in the student and guardian details → **Photo**: *Browse image file* or *Live webcam capture* → **Review A4 Summary** → **Print / Save PDF & Submit** (saves, then opens the form in its own window) or *Submit only* (just saves). The father's mobile is used for searching and SMS.
 
 ![Admission](img/04-admission-coaching.png)
 
@@ -67,9 +68,21 @@ Filter by class/batch and section, search, print the contact list or export CSV.
 ![Attendance matrix](img/13-attendance-matrix.png)
 
 ### Fees
-Search the student → the oldest unpaid bill is selected → change the amount for a partial payment → **Save Payment & Print Receipt**. The receipt prints on two A4 pages: the receipt, and the student's attendance for that month.
+Search the student → the oldest unpaid bill is selected → change the amount for a partial payment → then either:
+- **Save Payment** — just saves; nothing is printed. You can print the receipt later from *Payment history* (printer icon).
+- **Save & Print Receipt** — saves and opens the receipt in a new window.
+
+After a head is fully paid, the next unpaid head is selected automatically.
 
 ![Fees](img/14-fees.png)
+
+### Print window (all A4 documents)
+Every receipt, form, payslip, marksheet and report opens in **its own window** — nothing prints by itself. The window has three buttons:
+- **Print** — opens the Windows print dialog (choose a printer or *Microsoft Print to PDF*).
+- **Save PDF** — saves the document as a PDF file without printing; choose the folder and file name.
+- **Close** — closes the window; your data is already saved.
+
+![Print window](img/31-print-window.png)
 
 ## 4. Exams and results
 
@@ -98,7 +111,7 @@ The SMS window lists every student with the father's mobile and the exact messag
 - **Daily rate** — enter the days worked; the total is days × rate.
 - **Per class taken** — enter the number of classes; the total is classes × rate.
 
-**Pay salary** prints an A4 payslip showing the calculation.
+**Pay** saves the payment only; **Pay & Print Payslip** also opens the A4 payslip (with the calculation) in the print window.
 
 ![Daily pay](img/11-pay-daily.png)
 
@@ -147,6 +160,7 @@ Each backup file contains **all data up to that day**, not only that day.
 - **Pending requests:** new installations → **Approve** (plan, price, dates, max students) or **Reject**.
 - **Schools & Licenses:** filter School / Coaching; **+ New School License**; **Turn OFF / Activate**.
 - **School page:** record payment (extends the expiry and re-activates), license settings including **Product: School / Coaching**, reset PC binding, new key, emergency code for that PC, payment and heartbeat history.
+- **Reset app data** (school page): type the owner password → **Yes, reset this school's data**. The next time that PC goes online (within ~15 minutes), the app first saves a full safety backup to `%APPDATA%\…\safety-backups` (and the school's backup folder), then erases all students, fees, staff and settings and shows the Welcome screen — like a fresh install. The license stays. Until the PC confirms, the panel shows *Reset waiting* with a **Cancel** button.
 - **Emergency code:** one-time 5-day code for any PC ID + Lock ID.
 - **Settings:** payment instructions shown on locked screens, **emergency PIN for all schools**, **Download license backup** (do this monthly).
 

@@ -57,8 +57,15 @@ async function makeBrowserDriver(): Promise<Driver> {
     db.exec(`BEGIN; ${migration002}; PRAGMA user_version = 2; COMMIT;`);
     db.exec('PRAGMA foreign_keys = ON;');
   }
-  let timer: number | undefined;
-  const persist = () => { clearTimeout(timer); timer = window.setTimeout(() => idbPut(db.export()), 400); };
+  let timer: number | undefined, firstDirty = 0;
+  const save = () => { firstDirty = 0; timer = undefined; idbPut(db.export()); };
+  // Debounced, but never postponed by more than 1.5 s (a steady stream of writes must still be saved).
+  const persist = () => {
+    clearTimeout(timer);
+    if (!firstDirty) firstDirty = Date.now();
+    timer = window.setTimeout(save, Date.now() - firstDirty > 1500 ? 0 : 400);
+  };
+  window.addEventListener('pagehide', () => { if (timer !== undefined) { clearTimeout(timer); save(); } });
   const norm = (p: Param[]) => p.map((x) => (typeof x === 'boolean' ? (x ? 1 : 0) : x));
   return {
     async select<T>(sql: string, params: Param[] = []) {

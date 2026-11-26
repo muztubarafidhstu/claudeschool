@@ -21,7 +21,7 @@ li{margin:2px 0}
 <h2>দ্রুত শুরু (Bangla quick start)</h2>
 <ol>
 <li><strong>ইনস্টল:</strong> <code>ScholarDesk Pro_x64-setup.exe</code> চালান → <em>More info → Run anyway</em> → Install।</li>
-<li><strong>অ্যাক্টিভেশন:</strong> প্রথম স্ক্রিনে <strong>New school — request activation</strong> বেছে নিন, তথ্য দিন, পাঠান। অথবা <strong>I have a license key</strong> দিয়ে কী লিখুন।</li>
+<li><strong>অ্যাক্টিভেশন:</strong> প্রথম স্ক্রিনে <strong>New school — request activation</strong> বেছে নিন, তথ্য দিন, পাঠান। অথবা <strong>I have a license key</strong> → কী, স্কুল/কোচিংয়ের নাম ও লোগো দিন → <strong>Submit &amp; Check Subscription</strong>।</li>
 <li>মালিক (আপনি) <strong>school.rafid0.com → Pending requests → Approve</strong> চাপলে সফটওয়্যার এক মিনিটের মধ্যে নিজে থেকে খুলে যাবে।</li>
 <li><strong>প্রথম সেটআপ:</strong> স্কুল/কোচিংয়ের নাম লিখুন → <em>Start fresh</em> (নতুন) বা <em>Import demo data</em> (ডেমো)।</li>
 <li><strong>কোচিং হলে</strong> সব জায়গায় &quot;Class&quot; এর বদলে <strong>Batch</strong> দেখাবে। <em>Settings → Batches</em> এ নিজের ব্যাচ (ICT, Physics, SSC…) যোগ করুন।</li>
@@ -68,16 +68,17 @@ li{margin:2px 0}
 <li>Run <code>ScholarDesk Pro_1.0.0_x64-setup.exe</code> (from the <strong>nsis</strong> folder). Windows may say <em>Windows protected your PC</em> — click <strong>More info → Run anyway</strong>.</li>
 <li>First screen:<ul>
 <li><strong>New school — request activation:</strong> choose <em>School</em> or <em>Coaching centre</em>, fill in the name, contact person, mobile, district, address, approximate students and plan → <strong>Send activation request</strong>. The screen then shows <strong>Waiting for Approval</strong> and checks every minute.</li>
-<li><strong>I have a license key:</strong> type the key from your provider (e.g. <code>SCH-2026-7KQ4-M9XD</code>) → <strong>Activate License</strong>.</li>
+<li><strong>I have a license key:</strong> type the key from your provider (e.g. <code>SCH-2026-7KQ4-M9XD</code>), the school/coaching name (English and Bangla) and choose the <strong>logo</strong> → <strong>Submit &amp; Check Subscription</strong>. The name and logo are filled in for you on the next screen (useful after reinstalling Windows).</li>
 </ul>
 </li>
 <li>When approved, the app opens the <strong>Welcome</strong> screen: type the institution name (English/Bangla), then choose <strong>Start fresh</strong>, <strong>Import demo data</strong>, <strong>Upload settings config</strong> or <strong>Restore a backup file</strong>.</li>
 </ol>
-<p><img src="img/01-activation.png" alt="Activation"></p>
+<p><img src="img/01-activation.png" alt="Activation">
+<img src="img/30-key-screen.png" alt="Key screen with name and logo"></p>
 <p>The license is bound to this PC. To move to a new PC, ask the provider to <strong>Reset PC binding</strong>, then restore your backup on the new PC.</p>
 <h2>3. Daily work</h2>
 <h3>New admission</h3>
-<p><em>New Admission</em> → choose the <strong>Class/Batch</strong> and <strong>roll</strong> (the Student ID is generated as <code>YYCCRR</code>: year · class/batch · roll) → fill in the student and guardian details → <strong>Photo</strong>: <em>Browse image file</em> or <em>Live webcam capture</em> → <strong>Review A4 Summary</strong> → <strong>Print / Save PDF &amp; Submit</strong> (or <em>Submit only</em>). The father&#39;s mobile is used for searching and SMS.</p>
+<p><em>New Admission</em> → choose the <strong>Class/Batch</strong> and <strong>roll</strong> (the Student ID is generated as <code>YYCCRR</code>: year · class/batch · roll) → fill in the student and guardian details → <strong>Photo</strong>: <em>Browse image file</em> or <em>Live webcam capture</em> → <strong>Review A4 Summary</strong> → <strong>Print / Save PDF &amp; Submit</strong> (saves, then opens the form in its own window) or <em>Submit only</em> (just saves). The father&#39;s mobile is used for searching and SMS.</p>
 <p><img src="img/04-admission-coaching.png" alt="Admission"></p>
 <h3>Finding a student</h3>
 <p>Press <strong>Ctrl + K</strong> anywhere and type a Student ID, roll or guardian mobile. The profile shows personal details and fee history first, with buttons: <strong>Pay Fee</strong>, <strong>Enter / Edit Marks</strong>, <strong>Attendance Report</strong>, <strong>Print Admission Form</strong>, <strong>Edit Student Info</strong> (PIN 5555) and <strong>View Result</strong>.</p>
@@ -92,8 +93,21 @@ li{margin:2px 0}
 </ul>
 <p><img src="img/13-attendance-matrix.png" alt="Attendance matrix"></p>
 <h3>Fees</h3>
-<p>Search the student → the oldest unpaid bill is selected → change the amount for a partial payment → <strong>Save Payment &amp; Print Receipt</strong>. The receipt prints on two A4 pages: the receipt, and the student&#39;s attendance for that month.</p>
+<p>Search the student → the oldest unpaid bill is selected → change the amount for a partial payment → then either:</p>
+<ul>
+<li><strong>Save Payment</strong> — just saves; nothing is printed. You can print the receipt later from <em>Payment history</em> (printer icon).</li>
+<li><strong>Save &amp; Print Receipt</strong> — saves and opens the receipt in a new window.</li>
+</ul>
+<p>After a head is fully paid, the next unpaid head is selected automatically.</p>
 <p><img src="img/14-fees.png" alt="Fees"></p>
+<h3>Print window (all A4 documents)</h3>
+<p>Every receipt, form, payslip, marksheet and report opens in <strong>its own window</strong> — nothing prints by itself. The window has three buttons:</p>
+<ul>
+<li><strong>Print</strong> — opens the Windows print dialog (choose a printer or <em>Microsoft Print to PDF</em>).</li>
+<li><strong>Save PDF</strong> — saves the document as a PDF file without printing; choose the folder and file name.</li>
+<li><strong>Close</strong> — closes the window; your data is already saved.</li>
+</ul>
+<p><img src="img/31-print-window.png" alt="Print window"></p>
 <h2>4. Exams and results</h2>
 <h3>Coaching centres</h3>
 <ol>
@@ -117,7 +131,7 @@ li{margin:2px 0}
 <li><strong>Daily rate</strong> — enter the days worked; the total is days × rate.</li>
 <li><strong>Per class taken</strong> — enter the number of classes; the total is classes × rate.</li>
 </ul>
-<p><strong>Pay salary</strong> prints an A4 payslip showing the calculation.</p>
+<p><strong>Pay</strong> saves the payment only; <strong>Pay &amp; Print Payslip</strong> also opens the A4 payslip (with the calculation) in the print window.</p>
 <p><img src="img/11-pay-daily.png" alt="Daily pay"></p>
 <h2>6. Settings &amp; Control (PIN 0000)</h2>
 <ul>
@@ -163,6 +177,7 @@ Set <em>Success text</em> to what the provider returns on success (e.g. <code>20
 <li><strong>Pending requests:</strong> new installations → <strong>Approve</strong> (plan, price, dates, max students) or <strong>Reject</strong>.</li>
 <li><strong>Schools &amp; Licenses:</strong> filter School / Coaching; <strong>+ New School License</strong>; <strong>Turn OFF / Activate</strong>.</li>
 <li><strong>School page:</strong> record payment (extends the expiry and re-activates), license settings including <strong>Product: School / Coaching</strong>, reset PC binding, new key, emergency code for that PC, payment and heartbeat history.</li>
+<li><strong>Reset app data</strong> (school page): type the owner password → <strong>Yes, reset this school&#39;s data</strong>. The next time that PC goes online (within ~15 minutes), the app first saves a full safety backup to <code>%APPDATA%\…\safety-backups</code> (and the school&#39;s backup folder), then erases all students, fees, staff and settings and shows the Welcome screen — like a fresh install. The license stays. Until the PC confirms, the panel shows <em>Reset waiting</em> with a <strong>Cancel</strong> button.</li>
 <li><strong>Emergency code:</strong> one-time 5-day code for any PC ID + Lock ID.</li>
 <li><strong>Settings:</strong> payment instructions shown on locked screens, <strong>emergency PIN for all schools</strong>, <strong>Download license backup</strong> (do this monthly).</li>
 </ul>

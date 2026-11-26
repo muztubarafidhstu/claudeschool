@@ -12,6 +12,7 @@ import Attendance from './pages/Attendance';
 import Exams from './pages/Exams';
 import CoachingExams from './pages/CoachingExams';
 import { isCoaching } from './lib/groups';
+import { getConfig, setConfig } from './lib/config';
 import Fees from './pages/Fees';
 import Staff from './pages/Staff';
 import Backup from './pages/Backup';
@@ -38,6 +39,15 @@ function Main({ banner }: { banner: Evaluation | null }) {
   // Dynamic UI pruning: if the current page's module gets switched off, fall back to the dashboard.
   useEffect(() => { if (!isPageEnabled(page, settings.modules)) setPageRaw('dashboard'); }, [settings.modules, page]);
   useEffect(() => { void checkForUpdates(); }, []);
+  // Name / logo typed on the key screen (e.g. after a reinstall that kept the data) are applied once.
+  useEffect(() => {
+    if (!settings.onboarded) return;
+    void getConfig<{ name?: string; name_bn?: string; logo?: string | null } | null>('pending_profile', null).then(async (p) => {
+      if (!p) return;
+      await update({ school: { ...settings.school, name: p.name || settings.school.name, name_bn: p.name_bn || settings.school.name_bn, logo: p.logo ?? settings.school.logo } });
+      await setConfig('pending_profile', null);
+    });
+  }, [settings.onboarded]); // eslint-disable-line
   // The license decides School vs Coaching (switch in the owner panel or by entering another key).
   const { update } = useApp();
   const licProduct = banner?.state?.product;

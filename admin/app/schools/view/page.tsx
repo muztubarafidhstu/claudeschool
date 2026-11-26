@@ -6,6 +6,7 @@ import { ArrowLeft, Power, PowerOff, RotateCcw, KeyRound, Trash2 } from 'lucide-
 import { api, effectiveStatus, fmtBdt, fmtDate, ProductTag, type SchoolRow } from '@/lib/api';
 import StatusBadge from '@/components/StatusBadge';
 import EmergencyCode from '@/components/EmergencyCode';
+import ResetData from '@/components/ResetData';
 
 function Inner() {
   const id = useSearchParams().get('id') ?? '';
@@ -82,6 +83,7 @@ function Inner() {
       </div>
 
       {s.machine_id && <EmergencyCode machineId={s.machine_id} />}
+      {s.license_id && <ResetData licenseId={s.license_id} schoolName={s.name} pendingSince={(s as any).reset_requested_at} onChange={load} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="card overflow-x-auto">

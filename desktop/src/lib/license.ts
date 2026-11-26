@@ -172,7 +172,7 @@ export async function syncOnline(licenseKey?: string): Promise<SyncResult> {
     res = await httpFetch(`${LICENSE_API}/verify-license`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ license_key: key, machine_id, app_version: APP_VERSION, student_count: studentCount, local_utc_timestamp: nowUtc() }),
+      body: JSON.stringify({ license_key: key, machine_id, app_version: APP_VERSION, student_count: studentCount, local_utc_timestamp: nowUtc(), reset_ack: await getConfig<string | null>('last_reset_id', null) }),
     });
   } catch (e) {
     return { ok: false, message: `Cannot reach the license server. Check your internet connection and try again. (${String((e as Error)?.message ?? e).slice(0, 160)})` };
@@ -202,6 +202,11 @@ export async function syncOnline(licenseKey?: string): Promise<SyncResult> {
     return { ok: false, message: 'The server response could not be verified (signature mismatch). Contact support.' };
   }
   await saveLicense(next);
+  // Owner asked (from the web panel) to wipe this PC's data → safety backup, wipe, fresh start.
+  if (body.reset_id && prev?.license_key === key) {
+    const { applyRemoteReset } = await import('./remoteReset');
+    if (await applyRemoteReset(body.reset_id)) { setTimeout(() => window.location.reload(), 1200); return { ok: false, status: body.status, message: 'This software was reset by your provider. Starting fresh…' }; }
+  }
   return { ok: body.status === 'ACTIVE', status: body.status, message: body.payment_notice };
 }
 

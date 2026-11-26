@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { GraduationCap, KeyRound, Lock, RefreshCw, Wifi, Cpu, ShieldAlert, Send, Hourglass, School, LifeBuoy } from 'lucide-react';
 import { applyEmergencyCode, currentLockId, emergencyAvailable, evaluate, requestActivation, switchLicenseKey, syncOnline, EMERGENCY_DAYS, LOCK_TEXT, type Evaluation, type RegistrationForm } from '../lib/license';
-import { getConfig } from '../lib/config';
+import { getConfig, setConfig } from '../lib/config';
+import LogoInput from '../components/LogoInput';
 import { getMachineId } from '../lib/platform';
 
 const HEARTBEAT_MS = 15 * 60_000;  // online heartbeat (owner's ON/OFF switch takes effect within 15 min)
@@ -141,6 +142,10 @@ function Activation({ onDone }: { onDone: () => Promise<Evaluation> }) {
 
 function KeyForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
   const [key, setKey] = useState('');
+  const [name, setName] = useState('');
+  const [nameBn, setNameBn] = useState('');
+  const [logo, setLogo] = useState<string | null>(null);
+  useEffect(() => { getConfig<{ school?: { name?: string; name_bn?: string; logo?: string | null } }>('settings', {}).then((s) => { setName(s.school?.name ?? ''); setNameBn(s.school?.name_bn ?? ''); setLogo(s.school?.logo ?? null); }); }, []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   async function activate(e: React.FormEvent) {
@@ -148,15 +153,23 @@ function KeyForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
     setBusy(true); setErr('');
     const r = await syncOnline(key);
     setBusy(false);
-    if (r.ok || r.status === 'PENDING') await onDone(); else setErr(r.message || `Activation failed (${r.status ?? 'network'})`);
+    if (r.ok || r.status === 'PENDING') {
+      await setConfig('pending_profile', { name: name.trim(), name_bn: nameBn.trim(), logo });
+      await onDone();
+    } else setErr(r.message || `Activation failed (${r.status ?? 'network'})`);
   }
   return (
     <form onSubmit={activate} className="space-y-4 p-6">
       <p className="text-sm text-slate-500">{LOCK_TEXT.NEEDS_ACTIVATION.body} An internet connection is required once for activation.</p>
       <label className="block"><span className="label">School License Key</span>
         <input className="input font-mono text-lg uppercase tracking-wider" placeholder="SCH-2026-XXXX-XXXX" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} required autoFocus /></label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block"><span className="label">School / coaching name</span><input className="input" placeholder="e.g. Ridom Pathshala" value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="block"><span className="label">নাম (বাংলা)</span><input className="input bn" value={nameBn} onChange={(e) => setNameBn(e.target.value)} /></label>
+      </div>
+      <div><span className="label">Logo</span><LogoInput value={logo} onChange={setLogo} /></div>
       {err && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-bad">{err}</p>}
-      <button className="btn-primary w-full py-3" disabled={busy}><KeyRound size={18} /> {busy ? 'Verifying with license server…' : 'Activate License'}</button>
+      <button className="btn-primary w-full py-3" disabled={busy}><KeyRound size={18} /> {busy ? 'Checking subscription…' : 'Submit & Check Subscription'}</button>
     </form>
   );
 }
@@ -166,12 +179,14 @@ function RequestForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = <K extends keyof RegistrationForm>(k: K, v: RegistrationForm[K]) => setF((p) => ({ ...p, [k]: v }));
+  const [reqLogo, setReqLogo] = useState<string | null>(null);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!/^01\d{9}$/.test(f.phone)) return setErr('Mobile number must be 11 digits starting with 01.');
     setBusy(true); setErr('');
     const r = await requestActivation(f);
     setBusy(false);
+    if (r.ok || r.status === 'PENDING') await setConfig('pending_profile', { name: f.school_name, name_bn: f.school_name_bn ?? '', logo: reqLogo });
     if (r.ok || r.status === 'PENDING') await onDone(); else setErr(r.message || 'Request failed');
   }
   return (
@@ -189,6 +204,7 @@ function RequestForm({ onDone }: { onDone: () => Promise<Evaluation> }) {
       <label className="block"><span className="label">Email</span><input className="input" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} /></label>
       <label className="block"><span className="label">District</span><input className="input" value={f.district} onChange={(e) => set('district', e.target.value)} /></label>
       <label className="block sm:col-span-2"><span className="label">Address</span><input className="input" value={f.address} onChange={(e) => set('address', e.target.value)} /></label>
+      <div className="sm:col-span-2"><span className="label">Logo (optional)</span><LogoInput value={reqLogo} onChange={setReqLogo} /></div>
       <label className="block"><span className="label">Approx. students</span><input className="input" type="number" min={0} value={f.students_estimate ?? ''} onChange={(e) => set('students_estimate', e.target.value ? Number(e.target.value) : null)} /></label>
       <label className="block"><span className="label">Plan wanted</span>
         <select className="input" value={f.requested_plan} onChange={(e) => set('requested_plan', e.target.value as RegistrationForm['requested_plan'])}>

@@ -63,6 +63,14 @@ fn backup_read(dir: String, name: String) -> CmdResult<String> {
     backupfs::read(&dir, &name)
 }
 
+/// Folder for automatic safety backups (e.g. before a remote reset): <AppData>/safety-backups
+#[tauri::command]
+fn safety_backup_dir(app: tauri::AppHandle) -> CmdResult<String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("safety-backups");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn photo_write(dir: String, name: String, data_url: String) -> CmdResult<String> {
     backupfs::write_photo(&dir, &name, &data_url)
@@ -136,6 +144,7 @@ pub fn run() {
             backup_read,
             backup_prune,
             photo_write,
+            safety_backup_dir,
             http_request,
             start_oauth_listener
         ])

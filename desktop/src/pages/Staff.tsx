@@ -121,13 +121,13 @@ export default function Staff() {
         )}
       </Modal>
 
-      {pay && <PayModal staff={pay} onClose={() => setPay(null)} onPaid={(row, dueTotal) => { setPay(null); setSlip({ staff: pay, row, dueTotal, fresh: true }); bump(); }} onSlip={(row, dueTotal) => setSlip({ staff: pay, row, dueTotal })} />}
-      <PrintPreview open={!!slip} autoPrint={slip?.fresh} onClose={() => setSlip(null)} title="Salary payslip">{slip && <Payslip school={settings.school} staff={slip.staff} row={slip.row} dueTotal={slip.dueTotal} />}</PrintPreview>
+      {pay && <PayModal staff={pay} onClose={() => setPay(null)} onPaid={(row, dueTotal, print) => { setPay(null); if (print) setSlip({ staff: pay, row, dueTotal, fresh: true }); bump(); }} onSlip={(row, dueTotal) => setSlip({ staff: pay, row, dueTotal })} />}
+      <PrintPreview open={!!slip} openWindow={slip?.fresh} fileName={slip ? `Payslip_${slip.staff.name_en}_${slip.row.period}` : undefined} onClose={() => setSlip(null)} title="Salary payslip">{slip && <Payslip school={settings.school} staff={slip.staff} row={slip.row} dueTotal={slip.dueTotal} />}</PrintPreview>
     </div>
   );
 }
 
-function PayModal({ staff, onClose, onPaid, onSlip }: { staff: StaffRow; onClose: () => void; onPaid: (r: SalaryRow, dueTotal: number) => void; onSlip: (r: SalaryRow, dueTotal: number) => void }) {
+function PayModal({ staff, onClose, onPaid, onSlip }: { staff: StaffRow; onClose: () => void; onPaid: (r: SalaryRow, dueTotal: number, print: boolean) => void; onSlip: (r: SalaryRow, dueTotal: number) => void }) {
   const { toast } = useApp();
   const type: PayType = staff.pay_type ?? 'MONTHLY';
   const monthly = type === 'MONTHLY';
@@ -148,7 +148,7 @@ function PayModal({ staff, onClose, onPaid, onSlip }: { staff: StaffRow; onClose
     const periods = new Set(history.map((h) => h.period)); periods.add(period);
     return [...periods].reduce((a, p) => a + Math.max(0, staff.monthly_salary - history.filter((h) => h.period === p).reduce((x, h) => x + h.paid_amount, 0) - (p === period ? extraForPeriod : 0)), 0);
   };
-  async function submit() {
+  async function submit(print: boolean) {
     if (!monthly && (units <= 0 || rate <= 0)) return toast(`Enter the number of ${PAY_LABEL[type].unit} and the rate.`, 'err');
     if (amount <= 0 || amount > remaining) return toast(`Enter an amount between 1 and ${money(remaining)}.`, 'err');
     const row: Omit<SalaryRow, 'id'> = {
@@ -158,11 +158,11 @@ function PayModal({ staff, onClose, onPaid, onSlip }: { staff: StaffRow; onClose
     const r = await db.execute('INSERT INTO salary_ledger(staff_id, slip_no, period, regular_amount, paid_amount, due_after, paid_on, note, pay_type, units, unit_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
       [row.staff_id, row.slip_no, row.period, row.regular_amount, row.paid_amount, row.due_after, row.paid_on, row.note, row.pay_type!, row.units ?? null, row.unit_rate ?? null]);
     toast(`Paid ${money(amount)}`);
-    onPaid({ ...row, id: r.last_insert_id }, totalDue(amount));
+    onPaid({ ...row, id: r.last_insert_id }, totalDue(amount), print);
   }
   const year = Number(period.slice(0, 4));
   return (
-    <Modal open onClose={onClose} title={`Pay ${staff.name_en} · ${PAY_LABEL[type].name}`} width="max-w-2xl" footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={submit} disabled={!remaining}><Banknote size={16} /> Pay & Print Payslip</button></>}>
+    <Modal open onClose={onClose} title={`Pay ${staff.name_en} · ${PAY_LABEL[type].name}`} width="max-w-2xl" footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-ghost" onClick={() => submit(false)} disabled={!remaining}><Banknote size={16} /> Pay</button><button className="btn-primary" onClick={() => submit(true)} disabled={!remaining}><Printer size={16} /> Pay & Print Payslip</button></>}>
       <div className="grid gap-4 md:grid-cols-3">
         <Field label={monthly ? 'Salary month' : 'Month'}><select className="input" value={period} onChange={(e) => setPeriod(e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={`${year}-${pad2(i + 1)}`}>{m} {year}</option>)}</select></Field>
         {monthly ? (

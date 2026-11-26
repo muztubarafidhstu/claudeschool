@@ -7,7 +7,8 @@ import { importDemoData } from '../lib/demo';
 import { restoreBackup } from '../lib/backup';
 import { pickTextFile } from '../lib/platform';
 import { loadLicense, type RegistrationForm } from '../lib/license';
-import { getConfig } from '../lib/config';
+import { getConfig, setConfig } from '../lib/config';
+import LogoInput from '../components/LogoInput';
 import { useEffect } from 'react';
 
 export default function Onboarding() {
@@ -18,11 +19,13 @@ export default function Onboarding() {
     (async () => {
       // Pre-fill from the activation request (or the licensed school name).
       const reg = await getConfig<RegistrationForm | null>('registration', null);
+      const pend = await getConfig<{ name?: string; name_bn?: string; logo?: string | null } | null>('pending_profile', null);
       const l = await loadLicense();
       setSchool((s) => ({
         ...s,
-        name: s.name || reg?.school_name || l?.school_name || '',
-        name_bn: s.name_bn || reg?.school_name_bn || '',
+        name: s.name || pend?.name || reg?.school_name || l?.school_name || '',
+        name_bn: s.name_bn || pend?.name_bn || reg?.school_name_bn || '',
+        logo: s.logo || pend?.logo || null,
         phone: s.phone || reg?.phone || '',
         email: s.email || reg?.email || '',
         address: s.address || [reg?.address, reg?.district].filter(Boolean).join(', '),
@@ -34,6 +37,7 @@ export default function Onboarding() {
   async function finish(patch = {}) {
     const next = { ...settings, ...patch, school: { ...school, ...((patch as any).school ?? {}) }, onboarded: true };
     await saveSettings(next);
+    await setConfig('pending_profile', null);
     replaceSettings(next);
     bump();
   }
@@ -61,7 +65,8 @@ export default function Onboarding() {
           <Field label="Address"><input className="input" value={school.address} onChange={(e) => setSchool({ ...school, address: e.target.value })} /></Field>
           <Field label="Phone"><input className="input" value={school.phone} onChange={(e) => setSchool({ ...school, phone: e.target.value })} /></Field>
           <Field label="EIIN"><input className="input" value={school.eiin} onChange={(e) => setSchool({ ...school, eiin: e.target.value })} /></Field>
-          <Field label="Principal"><input className="input" value={school.principal} onChange={(e) => setSchool({ ...school, principal: e.target.value })} /></Field>
+          <Field label="Principal / Director"><input className="input" value={school.principal} onChange={(e) => setSchool({ ...school, principal: e.target.value })} /></Field>
+          <div className="md:col-span-2"><span className="label">Logo</span><LogoInput value={school.logo} onChange={(v) => setSchool({ ...school, logo: v })} /></div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {options.map(({ icon: Icon, title, desc, go }) => (

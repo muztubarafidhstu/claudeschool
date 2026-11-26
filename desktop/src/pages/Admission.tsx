@@ -6,7 +6,8 @@ import { useApp } from '../components/AppContext';
 import { Card, Field } from '../components/ui';
 import ClassPicker from '../components/ClassPicker';
 import PhotoInput from '../components/PhotoInput';
-import PrintPreview from '../components/PrintPreview';
+import PrintPreview, { printPortalContent } from '../components/PrintPreview';
+import { openPrintWindow } from '../lib/printWindow';
 import { AdmissionInvoice } from '../docs/Documents';
 import { db } from '../lib/db';
 import type { Student } from '../lib/fees';
@@ -108,11 +109,12 @@ export default function Admission({ editId, onDone }: { editId: number | null; o
     setF({ ...blank(settings.academicYear), ...keep });
   }
 
-  /** Save first (so a failed save is never printed), then open the print / Save-as-PDF dialog. */
+  /** Save first (so a failed save is never printed), then open the Print / Save PDF window. */
   async function printAndSubmit() {
     if (!(await submit())) return;
     await document.fonts.ready;
-    window.print();
+    const el = printPortalContent();
+    if (el) await openPrintWindow(el, `Admission form ${studentId}`, `Admission_${studentId}`);
     finish();
   }
 

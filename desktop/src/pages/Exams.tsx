@@ -163,7 +163,7 @@ function MarksModal({ student, initialExam, onClose }: { student: Student; initi
           ))}
         </div>
       </Modal>
-      <PrintPreview open={!!print} autoPrint={print === 'auto'} onClose={() => setPrint(false)} title="Marksheet"><Marksheet school={settings.school} s={student} exam={exam} year={year} calc={calc} /></PrintPreview>
+      <PrintPreview open={!!print} openWindow={print === 'auto'} fileName={`Marksheet_${student.student_id}_${exam}_${year}`} onClose={() => setPrint(false)} title="Marksheet"><Marksheet school={settings.school} s={student} exam={exam} year={year} calc={calc} /></PrintPreview>
     </>
   );
 }
