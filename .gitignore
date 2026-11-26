@@ -15,3 +15,4 @@ admin/next-env.d.ts
 *.zip
 .dev.vars
 cloud/.wrangler/
+*.exe
