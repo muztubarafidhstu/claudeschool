@@ -16,3 +16,4 @@ admin/next-env.d.ts
 .dev.vars
 cloud/.wrangler/
 *.exe
+*.msi
